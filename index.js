@@ -1,25 +1,33 @@
 const express = require("express");
-const bodyParser = require("body-parser");
-const cors = require("cors");
+const { Pool } = require("pg");
 
 const app = express();
-app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 
-const subscriptions = {};
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
-app.post("/webhook/mercadopago", (req, res) => {
-  const email = req.body.payer?.email;
-  if (email) subscriptions[email] = "ATIVO";
+app.post("/webhook", async (req, res) => {
+  const data = req.body;
+  console.log("Webhook recebido:", data);
+
+  if (data.type === "payment" || data.action?.includes("payment")) {
+    const email = data.data?.payer?.email;
+
+    if (email) {
+      await pool.query(
+        "UPDATE users SET active = true WHERE email = $1",
+        [email]
+      );
+    }
+  }
+
   res.sendStatus(200);
 });
 
-app.get("/status", (req, res) => {
-  const email = req.query.id;
-  if (subscriptions[email] === "ATIVO") return res.json({ status: "ATIVO" });
-  res.json({ status: "BLOQUEADO" });
-});
+app.get("/", (req, res) => res.send("AutoDriv Core OK"));
 
-app.get("/", (req,res)=>res.send("AutoDriv Core Online"));
-app.listen(3000);
-
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("Servidor rodando"));

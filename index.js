@@ -1,5 +1,4 @@
 const express = require("express");
-const fetch = require("node-fetch");
 const { Pool } = require("pg");
 
 const app = express();
@@ -50,7 +49,7 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // Busca detalhes no Mercado Pago
+    // fetch é NATIVO no Node 18+ (Render)
     const mpResponse = await fetch(
       `https://api.mercadopago.com/preapproval/${data.id}`,
       {
@@ -67,6 +66,7 @@ app.post("/webhook", async (req, res) => {
     }
 
     const email = mpSub.payer_email;
+
     const status =
       mpSub.status === "authorized"
         ? "active"

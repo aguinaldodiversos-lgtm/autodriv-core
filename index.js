@@ -1,5 +1,6 @@
 const express = require("express");
 const { Pool } = require("pg");
+const axios = require("axios");
 
 const app = express();
 app.use(express.json());
@@ -26,7 +27,7 @@ const PLANS = {
   },
   basic: {
     name: "Plano Básico",
-    price: 6.90, // 🔧 EDITÁVEL
+    price: 6.90,
     limits: {
       vehicles: 15,
       users: 3,
@@ -42,7 +43,7 @@ const PLANS = {
   },
   premium: {
     name: "Plano Premium",
-    price: 9.90, // 🔧 EDITÁVEL
+    price: 9.90,
     limits: {
       vehicles: "unlimited",
       users: "unlimited",
@@ -89,10 +90,98 @@ async function initDB() {
 initDB();
 
 /* =========================
+   CACHE FIPE (ATÉ VIRADA DO MÊS)
+========================= */
+const FIPE_CACHE = new Map();
+
+function getNextFipeUpdateDate() {
+  const now = new Date();
+  return new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    1,
+    0,
+    0,
+    0,
+    0
+  );
+}
+
+function getFipeCacheKey({ tipo, marca, modelo, ano }) {
+  return `${tipo}:${marca}:${modelo}:${ano}`;
+}
+
+/* =========================
    HEALTH CHECK
 ========================= */
 app.get("/", (req, res) => {
   res.send("AutoDriv Core OK");
+});
+
+/* =========================
+   CONSULTA FIPE (CACHE INTELIGENTE)
+========================= */
+app.get("/api/fipe", async (req, res) => {
+  try {
+    const { tipo, marca, modelo, ano } = req.query;
+
+    if (!tipo || !marca || !modelo || !ano) {
+      return res.status(400).json({
+        erro: "Parâmetros obrigatórios: tipo, marca, modelo, ano"
+      });
+    }
+
+    const cacheKey = getFipeCacheKey({ tipo, marca, modelo, ano });
+    const cached = FIPE_CACHE.get(cacheKey);
+    const now = new Date();
+
+    // ✅ RETORNA CACHE SE AINDA FOR VÁLIDO
+    if (cached && now < cached.expiresAt) {
+      return res.json({
+        source: "cache",
+        expiresAt: cached.expiresAt,
+        data: cached.data
+      });
+    }
+
+    // 🔄 CONSULTA API FIPE
+    const response = await axios.get(
+      "https://api.fipe.online/v1/price",
+      {
+        headers: {
+          "X-API-KEY": process.env.FIPE_API_KEY
+        },
+        params: {
+          vehicleType: tipo, // car | motorcycle | truck
+          brand: marca,
+          model: modelo,
+          year: ano
+        }
+      }
+    );
+
+    const expiresAt = getNextFipeUpdateDate();
+
+    // 💾 SALVA CACHE ATÉ A PRÓXIMA ATUALIZAÇÃO FIPE
+    FIPE_CACHE.set(cacheKey, {
+      data: response.data,
+      expiresAt
+    });
+
+    res.json({
+      source: "api",
+      expiresAt,
+      data: response.data
+    });
+
+  } catch (error) {
+    console.error("Erro consulta FIPE:", error.response?.data || error.message);
+
+    res.status(500).json({
+      erro: "Erro ao consultar tabela FIPE",
+      detalhe: error.response?.data || null
+    });
+  }
 });
 
 /* =========================
@@ -125,7 +214,7 @@ app.post("/create-trial", async (req, res) => {
 ========================= */
 app.post("/webhook", async (req, res) => {
   try {
-    const { type, data } = req.body;
+    const { data } = req.body;
     if (!data?.id) return res.sendStatus(200);
 
     const mpResponse = await fetch(
@@ -170,7 +259,6 @@ app.post("/webhook", async (req, res) => {
       [email, plan, status, currentPeriodEnd, mpSub.id]
     );
 
-    console.log("Assinatura atualizada:", email, plan, status);
     res.sendStatus(200);
   } catch (err) {
     console.error("Erro webhook:", err);
@@ -206,16 +294,8 @@ app.get("/access-check", async (req, res) => {
 
     if (diffDays <= 2) {
       access = "payment_only";
-      await pool.query(
-        `UPDATE subscriptions SET status = 'past_due' WHERE email = $1`,
-        [email]
-      );
     } else {
       access = "blocked";
-      await pool.query(
-        `UPDATE subscriptions SET status = 'blocked' WHERE email = $1`,
-        [email]
-      );
     }
   }
 
@@ -229,34 +309,6 @@ app.get("/access-check", async (req, res) => {
       premium: PLANS.premium.price
     }
   });
-});
-
-/* =========================
-   EMAIL REMINDERS (OPCIONAL)
-========================= */
-app.post("/cron/reminders", async (req, res) => {
-  const now = new Date();
-
-  const result = await pool.query(`
-    SELECT email, current_period_end
-    FROM subscriptions
-    WHERE status IN ('active','past_due')
-  `);
-
-  for (const sub of result.rows) {
-    const daysLeft = Math.ceil(
-      (new Date(sub.current_period_end) - now) / (1000 * 60 * 60 * 24)
-    );
-
-    if ([7, 3, 0].includes(daysLeft)) {
-      console.log(
-        `Enviar e-mail lembrete (${daysLeft} dias) para ${sub.email}`
-      );
-      // 👉 integrar serviço de e-mail aqui (Sendgrid, Resend, etc.)
-    }
-  }
-
-  res.json({ success: true });
 });
 
 /* =========================

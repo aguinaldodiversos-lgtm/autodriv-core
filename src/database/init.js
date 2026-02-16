@@ -16,7 +16,7 @@ async function initDB() {
     `);
 
     /* =========================
-       USERS (USUÁRIOS DA LOJA)
+       USERS
     ========================= */
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -31,7 +31,7 @@ async function initDB() {
     `);
 
     /* =========================
-       SUBSCRIPTIONS (PLANOS)
+       SUBSCRIPTIONS
     ========================= */
     await pool.query(`
       CREATE TABLE IF NOT EXISTS subscriptions (
@@ -47,7 +47,7 @@ async function initDB() {
     `);
 
     /* =========================
-       VEHICLES (VEÍCULOS)
+       VEHICLES
     ========================= */
     await pool.query(`
       CREATE TABLE IF NOT EXISTS vehicles (
@@ -64,7 +64,7 @@ async function initDB() {
     `);
 
     /* =========================
-       CLIENTS (CLIENTES)
+       CLIENTS
     ========================= */
     await pool.query(`
       CREATE TABLE IF NOT EXISTS clients (
@@ -117,7 +117,7 @@ async function initDB() {
     `);
 
     /* =========================
-       SALES (VENDAS)
+       SALES
     ========================= */
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sales (
@@ -135,31 +135,30 @@ async function initDB() {
     `);
 
     /* =========================
-       ÍNDICES DE PERFORMANCE
+       FINANCIAL TRANSACTIONS
     ========================= */
     await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_users_dealership
-      ON users(dealership_id);
+      CREATE TABLE IF NOT EXISTS financial_transactions (
+        id SERIAL PRIMARY KEY,
+        dealership_id INT REFERENCES dealerships(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('income','expense')),
+        category TEXT,
+        description TEXT,
+        amount NUMERIC NOT NULL,
+        due_date DATE,
+        paid_date DATE,
+        status TEXT DEFAULT 'pending',
+        related_sale_id INT REFERENCES sales(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
     `);
 
+    /* =========================
+       ÍNDICES
+    ========================= */
     await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_vehicles_dealership
-      ON vehicles(dealership_id);
-    `);
-
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_clients_dealership
-      ON clients(dealership_id);
-    `);
-
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_leads_dealership
-      ON leads(dealership_id);
-    `);
-
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_proposals_dealership
-      ON proposals(dealership_id);
+      CREATE INDEX IF NOT EXISTS idx_finance_dealership
+      ON financial_transactions(dealership_id);
     `);
 
     await pool.query(`
@@ -168,15 +167,30 @@ async function initDB() {
     `);
 
     await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_subscriptions_dealership
-      ON subscriptions(dealership_id);
+      CREATE INDEX IF NOT EXISTS idx_proposals_dealership
+      ON proposals(dealership_id);
     `);
 
-    console.log("Banco inicializado com sucesso");
-  } catch (err) {
-    console.error("Erro ao inicializar banco:", err);
-    process.exit(1);
-  }
-}
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_leads_dealership
+      ON leads(dealership_id);
+    `);
 
-module.exports = initDB;
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_clients_dealership
+      ON clients(dealership_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_vehicles_dealership
+      ON vehicles(dealership_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_dealership
+      ON users(dealership_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_subscriptions_dealership
+      ON subscri

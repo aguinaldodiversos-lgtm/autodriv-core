@@ -2,9 +2,6 @@ const pool = require("../config/db");
 
 async function runMigrations() {
   try {
-    /* =========================
-       TABELA DE CONTROLE
-    ========================= */
     await pool.query(`
       CREATE TABLE IF NOT EXISTS migrations (
         id SERIAL PRIMARY KEY,
@@ -16,9 +13,6 @@ async function runMigrations() {
     const { rows } = await pool.query(`SELECT name FROM migrations`);
     const executed = rows.map(r => r.name);
 
-    /* =========================
-       LISTA DE MIGRATIONS
-    ========================= */
     const migrations = [
       require("./migrations/001_dealerships"),
       require("./migrations/002_users"),
@@ -30,16 +24,13 @@ async function runMigrations() {
       require("./migrations/008_sales"),
       require("./migrations/009_finance"),
       require("./migrations/010_maintenance"),
-      require("./migrations/011_ads")
+      require("./migrations/011_ads"),
+      require("./migrations/012_public_slug")
     ];
 
-    /* =========================
-       EXECUÇÃO DAS MIGRATIONS
-    ========================= */
     for (const migration of migrations) {
       if (!executed.includes(migration.name)) {
         console.log("Rodando migration:", migration.name);
-
         await migration.up(pool);
 
         await pool.query(

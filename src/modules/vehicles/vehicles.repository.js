@@ -3,8 +3,8 @@ const pool = require("../../config/db");
 async function create(vehicle) {
   const result = await pool.query(
     `INSERT INTO vehicles
-     (dealership_id, title, brand, model, year, price)
-     VALUES ($1,$2,$3,$4,$5,$6)
+     (dealership_id, title, brand, model, year, price, slug, seo_title, seo_description)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
      RETURNING *`,
     [
       vehicle.dealership_id,
@@ -12,7 +12,10 @@ async function create(vehicle) {
       vehicle.brand,
       vehicle.model,
       vehicle.year,
-      vehicle.price
+      vehicle.price,
+      vehicle.slug,
+      vehicle.seo_title,
+      vehicle.seo_description
     ]
   );
 

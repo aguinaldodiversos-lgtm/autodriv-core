@@ -7,6 +7,7 @@ const leadRoutes = require("./modules/leads/leads.routes");
 const proposalRoutes = require("./modules/proposals/proposals.routes");
 const salesRoutes = require("./modules/sales/sales.routes");
 const financeRoutes = require("./modules/finance/finance.routes");
+const dashboardRoutes = require("./modules/dashboard/dashboard.routes");
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use("/api/leads", leadRoutes);
 app.use("/api/proposals", proposalRoutes);
 app.use("/api/sales", salesRoutes);
 app.use("/api/finance", financeRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Rota não encontrada" });

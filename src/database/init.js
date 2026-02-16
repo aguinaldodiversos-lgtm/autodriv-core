@@ -64,23 +64,23 @@ async function initDB() {
     `);
 
     /* =========================
-   CLIENTS (CLIENTES)
-========================= */
- await pool.query(`
-  CREATE TABLE IF NOT EXISTS clients (
-    id SERIAL PRIMARY KEY,
-    dealership_id INT REFERENCES dealerships(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    phone TEXT,
-    email TEXT,
-    cpf_cnpj TEXT,
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
-  );
-`);
+       CLIENTS (CLIENTES)
+    ========================= */
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS clients (
+        id SERIAL PRIMARY KEY,
+        dealership_id INT REFERENCES dealerships(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        phone TEXT,
+        email TEXT,
+        cpf_cnpj TEXT,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
 
     /* =========================
-       ÍNDICES PARA PERFORMANCE
+       ÍNDICES DE PERFORMANCE
     ========================= */
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_users_dealership
@@ -90,6 +90,11 @@ async function initDB() {
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_vehicles_dealership
       ON vehicles(dealership_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_clients_dealership
+      ON clients(dealership_id);
     `);
 
     await pool.query(`

@@ -39,4 +39,144 @@ async function initDB() {
         dealership_id INT UNIQUE REFERENCES dealerships(id) ON DELETE CASCADE,
         plan TEXT NOT NULL CHECK (plan IN ('starter','pro','master')),
         status TEXT NOT NULL CHECK (status IN ('active','past_due','blocked')),
-        current_peri_
+        current_period_end TIMESTAMP NOT NULL,
+        mp_subscription_id TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    /* =========================
+       VEHICLES (VEÍCULOS)
+    ========================= */
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vehicles (
+        id SERIAL PRIMARY KEY,
+        dealership_id INT REFERENCES dealerships(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        brand TEXT,
+        model TEXT,
+        year INT,
+        price NUMERIC,
+        status TEXT DEFAULT 'available',
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    /* =========================
+       CLIENTS (CLIENTES)
+    ========================= */
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS clients (
+        id SERIAL PRIMARY KEY,
+        dealership_id INT REFERENCES dealerships(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        phone TEXT,
+        email TEXT,
+        cpf_cnpj TEXT,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    /* =========================
+       LEADS
+    ========================= */
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS leads (
+        id SERIAL PRIMARY KEY,
+        dealership_id INT REFERENCES dealerships(id) ON DELETE CASCADE,
+        client_id INT REFERENCES clients(id) ON DELETE SET NULL,
+        vehicle_id INT REFERENCES vehicles(id) ON DELETE SET NULL,
+        assigned_user_id INT REFERENCES users(id) ON DELETE SET NULL,
+        source TEXT,
+        status TEXT DEFAULT 'new',
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    /* =========================
+       PROPOSALS
+    ========================= */
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS proposals (
+        id SERIAL PRIMARY KEY,
+        dealership_id INT REFERENCES dealerships(id) ON DELETE CASCADE,
+        lead_id INT REFERENCES leads(id) ON DELETE SET NULL,
+        client_id INT REFERENCES clients(id) ON DELETE SET NULL,
+        vehicle_id INT REFERENCES vehicles(id) ON DELETE SET NULL,
+        created_by INT REFERENCES users(id) ON DELETE SET NULL,
+        price NUMERIC,
+        status TEXT DEFAULT 'open',
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    /* =========================
+       SALES (VENDAS)
+    ========================= */
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sales (
+        id SERIAL PRIMARY KEY,
+        dealership_id INT REFERENCES dealerships(id) ON DELETE CASCADE,
+        proposal_id INT REFERENCES proposals(id) ON DELETE SET NULL,
+        client_id INT REFERENCES clients(id) ON DELETE SET NULL,
+        vehicle_id INT REFERENCES vehicles(id) ON DELETE SET NULL,
+        sold_by INT REFERENCES users(id) ON DELETE SET NULL,
+        final_price NUMERIC NOT NULL,
+        payment_method TEXT,
+        status TEXT DEFAULT 'completed',
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    /* =========================
+       ÍNDICES DE PERFORMANCE
+    ========================= */
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_dealership
+      ON users(dealership_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_vehicles_dealership
+      ON vehicles(dealership_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_clients_dealership
+      ON clients(dealership_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_leads_dealership
+      ON leads(dealership_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_proposals_dealership
+      ON proposals(dealership_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_sales_dealership
+      ON sales(dealership_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_subscriptions_dealership
+      ON subscriptions(dealership_id);
+    `);
+
+    console.log("Banco inicializado com sucesso");
+  } catch (err) {
+    console.error("Erro ao inicializar banco:", err);
+    process.exit(1);
+  }
+}
+
+module.exports = initDB;

@@ -11,6 +11,7 @@ const dashboardRoutes = require("./modules/dashboard/dashboard.routes");
 const maintenanceRoutes = require("./modules/maintenance/maintenance.routes");
 const adsRoutes = require("./modules/ads/ads.routes");
 const publicRoutes = require("./modules/public/public.routes");
+const imagesRoutes = require("./modules/images/images.routes");
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use("/api/finance", financeRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
 app.use("/api/ads", adsRoutes);
+app.use("/api/images", imagesRoutes);
 
 /* ROTAS PÚBLICAS */
 app.use("/public", publicRoutes);

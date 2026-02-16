@@ -78,7 +78,8 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
-  /* =========================
+
+    /* =========================
        LEADS
     ========================= */
     await pool.query(`
@@ -112,6 +113,11 @@ async function initDB() {
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_clients_dealership
       ON clients(dealership_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_leads_dealership
+      ON leads(dealership_id);
     `);
 
     await pool.query(`

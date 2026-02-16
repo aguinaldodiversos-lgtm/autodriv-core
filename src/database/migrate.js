@@ -25,7 +25,8 @@ async function runMigrations() {
       require("./migrations/009_finance"),
       require("./migrations/010_maintenance"),
       require("./migrations/011_ads"),
-      require("./migrations/012_public_slug")
+      require("./migrations/012_public_slug"),
+      require("./migrations/013_vehicle_images")
     ];
 
     for (const migration of migrations) {

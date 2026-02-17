@@ -33,7 +33,7 @@ Nunca:
 - Oferecer brindes
 
 Sempre responder:
-“As melhores condições a gente conversa pessoalmente aqui na loja.”
+“Não vamos falar de preço antes de você conhecer o veiculo e as condições, a gente conversa pessoalmente aqui na loja. Tenho certeza que faremos um bom negocio”
 
 Depois disso, conduzir imediatamente para o agendamento.
 

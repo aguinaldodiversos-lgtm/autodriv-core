@@ -2,7 +2,7 @@ module.exports = {
   name: "003_subscriptions",
 
   async up(pool) {
-    // cria a tabela se não existir
+    // cria a tabela básica se não existir
     await pool.query(`
       CREATE TABLE IF NOT EXISTS subscriptions (
         id SERIAL PRIMARY KEY,
@@ -15,22 +15,13 @@ module.exports = {
       );
     `);
 
-    // adiciona coluna dealership_id se não existir
+    // adiciona a coluna dealership_id se não existir
     await pool.query(`
       ALTER TABLE subscriptions
       ADD COLUMN IF NOT EXISTS dealership_id INT;
     `);
 
-    // adiciona constraints corretas
-    await pool.query(`
-      ALTER TABLE subscriptions
-      ADD CONSTRAINT IF NOT EXISTS fk_subscriptions_dealership
-      FOREIGN KEY (dealership_id)
-      REFERENCES dealerships(id)
-      ON DELETE CASCADE;
-    `);
-
-    // cria índice somente depois da coluna existir
+    // cria o índice (só funciona se a coluna existir)
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_subscriptions_dealership
       ON subscriptions(dealership_id);

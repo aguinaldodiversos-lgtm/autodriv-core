@@ -50,10 +50,10 @@ async function register(req, res) {
       const user = userResult.rows[0];
 
       /* =========================
-         CRIA ASSINATURA TRIAL
+         CRIA ASSINATURA TRIAL (15 DIAS)
       ========================== */
       const trialEnd = new Date();
-      trialEnd.setDate(trialEnd.getDate() + 30);
+      trialEnd.setDate(trialEnd.getDate() + 15);
 
       await client.query(
         `INSERT INTO subscriptions
@@ -81,7 +81,14 @@ async function register(req, res) {
         { expiresIn: "7d" }
       );
 
-      res.json({ token });
+      res.json({
+        token,
+        dealership: {
+          id: dealership.id,
+          name: dealership.name
+        },
+        trial_ends_at: trialEnd
+      });
 
     } catch (err) {
       await client.query("ROLLBACK");

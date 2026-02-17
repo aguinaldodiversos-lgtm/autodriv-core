@@ -1,11 +1,37 @@
 module.exports = {
+  trial: {
+    name: "Trial",
+    limits: {
+      vehicles: "unlimited",
+      leads: "unlimited",
+      users: "unlimited"
+    }
+  },
+
   starter: {
-    limits: { vehicles: 10, users: 1 }
+    name: "Starter",
+    limits: {
+      vehicles: 10,
+      leads: 200,
+      users: 1
+    }
   },
+
   pro: {
-    limits: { vehicles: 30, users: 3 }
+    name: "Pro",
+    limits: {
+      vehicles: 30,
+      leads: 1000,
+      users: 3
+    }
   },
+
   master: {
-    limits: { vehicles: "unlimited", users: "unlimited" }
+    name: "Master",
+    limits: {
+      vehicles: "unlimited",
+      leads: "unlimited",
+      users: "unlimited"
+    }
   }
 };

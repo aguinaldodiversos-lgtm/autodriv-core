@@ -1,162 +1,151 @@
-module.exports = function buildPrompt(context) {
-  const { vehicle, state } = context;
+const pool = require("../../config/db");
+const engine = require("./conversation.engine");
 
-  return `
-Você é um vendedor profissional de uma loja de veículos.
+async function handleMessage(leadId, message) {
+  const leadResult = await pool.query(
+    `SELECT * FROM leads WHERE id = $1`,
+    [leadId]
+  );
 
-Seu único objetivo é:
-QUALIFICAR O CLIENTE E AGENDAR UMA VISITA NA LOJA.
+  const lead = leadResult.rows[0];
+  if (!lead) throw new Error("Lead não encontrado");
 
-Você NÃO fecha vendas, NÃO negocia preço.
-Você apenas informa o valor anunciado.
+  /* =========================
+     BUSCA VEÍCULO COMPLETO
+  ========================== */
+  const vehicleResult = await pool.query(
+    `SELECT
+        v.*,
+        s.seo_title,
+        s.seo_description
+     FROM vehicles v
+     LEFT JOIN vehicle_seo s
+       ON s.vehicle_id = v.id
+     WHERE v.id = $1`,
+    [lead.vehicle_id]
+  );
 
-Se o cliente pedir desconto:
-- Informe educadamente que condições e descontos são tratados apenas pessoalmente na loja.
+  const vehicle = vehicleResult.rows[0];
 
-Seu trabalho é conduzir o cliente até a visita presencial.
+  /* =========================
+     BUSCA TAREFAS DE MANUTENÇÃO
+  ========================== */
+  const maintenanceResult = await pool.query(
+    `SELECT t.title, t.status
+     FROM maintenance_tasks t
+     JOIN maintenance_orders o
+       ON o.id = t.order_id
+     WHERE o.vehicle_id = $1`,
+    [lead.vehicle_id]
+  );
 
-========================================
-REGRAS DE COMPORTAMENTO
-========================================
+  const maintenanceTasks = maintenanceResult.rows;
 
-- Fale como um vendedor humano, nunca como robô.
-- Respostas curtas, naturais e objetivas.
-- Máximo de 3 frases por resposta.
-- Sempre conduza a conversa para a visita.
-- Seja educado, direto e confiante.
-- Nunca faça interrogatório.
-- Faça apenas uma pergunta por resposta.
+  /* =========================
+     SALVA MENSAGEM DO CLIENTE
+  ========================== */
+  await pool.query(
+    `INSERT INTO lead_conversations
+     (dealership_id, lead_id, role, message)
+     VALUES ($1,$2,'client',$3)`,
+    [lead.dealership_id, leadId, message]
+  );
 
-NUNCA:
-- Negociar preço pelo chat.
-- Prometer financiamento aprovado.
-- Inventar informações.
-- Dar respostas longas ou técnicas.
-- Usar linguagem de robô.
+  /* =========================
+     ESTADO DA IA
+  ========================== */
+  let stateResult = await pool.query(
+    `SELECT * FROM lead_ai_state WHERE lead_id = $1`,
+    [leadId]
+  );
 
-========================================
-DADOS DO VEÍCULO
-========================================
+  let state = stateResult.rows[0];
 
-Marca: ${vehicle?.brand || ""}
-Modelo: ${vehicle?.model || ""}
-Ano: ${vehicle?.year || ""}
-Preço: ${vehicle?.price || ""}
+  if (!state) {
+    const insert = await pool.query(
+      `INSERT INTO lead_ai_state
+       (dealership_id, lead_id, stage)
+       VALUES ($1,$2,'new')
+       RETURNING *`,
+      [lead.dealership_id, leadId]
+    );
+    state = insert.rows[0];
+  }
 
-Se houver informações adicionais do veículo, utilize para valorizar o carro.
+  /* =========================
+     ÚLTIMAS MENSAGENS
+  ========================== */
+  const convo = await pool.query(
+    `SELECT role, message
+     FROM lead_conversations
+     WHERE lead_id = $1
+     ORDER BY id DESC
+     LIMIT 6`,
+    [leadId]
+  );
 
-========================================
-ESTÁGIO ATUAL DO LEAD
-========================================
+  const messages = convo.rows
+    .reverse()
+    .map(m => ({
+      role: m.role === "client" ? "user" : "assistant",
+      content: m.message
+    }));
 
-${state?.stage || "new"}
+  /* =========================
+     MONTA CONTEXTO DO VEÍCULO
+  ========================== */
+  const vehicleContext = {
+    brand: vehicle.brand,
+    model: vehicle.model,
+    year: vehicle.year,
+    price: vehicle.price,
+    mileage: vehicle.mileage,
+    fuel: vehicle.fuel,
+    transmission: vehicle.transmission,
+    color: vehicle.color,
+    description: vehicle.description,
+    seo_description: vehicle.seo_description,
+    documentation_status: vehicle.documentation_status,
+    maintenance: maintenanceTasks
+      .map(t => `${t.title} (${t.status})`)
+      .join(", ")
+  };
 
-========================================
-FLUXO DE CONVERSA (SIGA ESTA ORDEM)
-========================================
+  /* =========================
+     CHAMA IA
+  ========================== */
+  const reply = await engine.generateReply(
+    {
+      vehicle: vehicleContext,
+      state
+    },
+    messages
+  );
 
-1) Confirmar disponibilidade + valorizar o veículo
+  /* =========================
+     SALVA RESPOSTA DA IA
+  ========================== */
+  await pool.query(
+    `INSERT INTO lead_conversations
+     (dealership_id, lead_id, role, message)
+     VALUES ($1,$2,'ai',$3)`,
+    [lead.dealership_id, leadId, reply]
+  );
 
-Sempre que o cliente perguntar sobre o carro:
+  /* =========================
+     ATUALIZA ESTÁGIO
+  ========================== */
+  await pool.query(
+    `UPDATE lead_ai_state
+     SET stage = 'qualifying',
+         updated_at = NOW()
+     WHERE lead_id = $1`,
+    [leadId]
+  );
 
-- Confirme disponibilidade
-- Destaque qualidades reais do veículo
-- Faça um comentário humano e simpático
-- Só depois faça a pergunta de qualificação
+  return { reply };
+}
 
-Exemplo:
-"Está disponível sim. Esse veículo está muito bem conservado e com laudo cautelar aprovado. É um modelo que costuma agradar bastante quem procura esse tipo de carro. Você pretende pagar à vista ou financiar?"
-
-2) Qualificar forma de pagamento
-Ex:
-"Você pretende pagar à vista ou financiar?"
-
-3) Verificar troca
-Ex:
-"Tem algum veículo na troca?"
-
-4) Entender momento de compra
-Ex:
-"Você pretende comprar em quanto tempo?"
-
-5) Conduzir para visita
-Ex:
-"O ideal é ver o carro pessoalmente.
-Podemos agendar uma visita?"
-
-========================================
-TÉCNICAS DE PERSUASÃO (USAR COM NATURALIDADE)
-========================================
-
-Use técnicas leves, sem exageros.
-
-1) Prova social
-- "Esse modelo tem bastante saída."
-- "É um dos mais procurados aqui na loja."
-
-2) Valorização do veículo
-- "É um carro muito bem conservado."
-- "Está em ótimo estado."
-- "Tem um ótimo custo-benefício."
-
-3) Direcionamento para ação
-Nunca pergunte:
-"Você quer visitar?"
-
-Sempre use:
-"Você prefere vir hoje ou amanhã?"
-
-4) Autoridade leve
-- "O ideal é ver o carro pessoalmente."
-- "Assim você consegue avaliar todos os detalhes."
-
-Nunca force urgência falsa.
-Nunca pressione o cliente.
-
-========================================
-TRATAMENTO DE PEDIDO DE DESCONTO
-========================================
-
-Se o cliente pedir desconto, responda de forma natural:
-
-Exemplos:
-- "Condições e descontos a gente conversa pessoalmente na loja."
-- "O valor anunciado é esse, mas as condições a gente vê direto na loja."
-- "O ideal é ver o carro primeiro, aí a gente conversa sobre valores."
-
-Depois disso, volte a conduzir para a visita.
-
-========================================
-AGENDAMENTO DE VISITA
-========================================
-
-Quando o cliente demonstrar interesse, diga:
-
-"Perfeito. Podemos agendar uma visita.
-Você prefere vir hoje ou amanhã?"
-
-Ou:
-
-"Temos horários disponíveis.
-Qual período é melhor para você?"
-
-Ou:
-
-"Consigo te atender hoje à tarde ou amanhã de manhã.
-Qual é melhor para você?"
-
-========================================
-ESTILO DE RESPOSTA
-========================================
-
-Exemplo de resposta ideal:
-
-Cliente:
-"Esse carro está disponível?"
-
-Você:
-"Está disponível sim. É um carro muito bem conservado e com laudo cautelar aprovado. Esse modelo tem bastante saída aqui na loja. Você pretende pagar à vista ou financiar?"
-
-Sempre responda como um vendedor humano, natural e direto.
-`;
+module.exports = {
+  handleMessage
 };

@@ -23,9 +23,9 @@ module.exports = async function auth(req, res, next) {
 
     const dealershipId = decoded.dealership_id;
 
-    // =============================
-    // BUSCA ASSINATURA
-    // =============================
+    /* =============================
+       BUSCA ASSINATURA
+    ============================= */
     let subResult = await pool.query(
       `SELECT * FROM subscriptions
        WHERE dealership_id = $1`,
@@ -34,10 +34,12 @@ module.exports = async function auth(req, res, next) {
 
     let subscription = subResult.rows[0];
 
-    // Se não existir assinatura, cria trial automaticamente
+    /* =============================
+       CRIA TRIAL AUTOMÁTICO (15 DIAS)
+    ============================= */
     if (!subscription) {
       const trialEnd = new Date();
-      trialEnd.setDate(trialEnd.getDate() + 30);
+      trialEnd.setDate(trialEnd.getDate() + 15);
 
       await pool.query(
         `INSERT INTO subscriptions
@@ -61,16 +63,24 @@ module.exports = async function auth(req, res, next) {
       });
     }
 
-    // =============================
-    // VERIFICA BLOQUEIO
-    // =============================
+    /* =============================
+       CONTROLE DE VENCIMENTO
+    ============================= */
     const now = new Date();
     const end = new Date(subscription.current_period_end);
 
-    if (now > end && subscription.status !== "active") {
-      return res.status(403).json({
-        error: "Assinatura bloqueada"
-      });
+    if (now > end) {
+      const diffDays = (now - end) / (1000 * 60 * 60 * 24);
+
+      // período de graça de 5 dias
+      if (diffDays <= 5) {
+        req.subscription_status = "grace";
+      } else {
+        return res.status(403).json({
+          error: "Assinatura bloqueada",
+          code: "SUBSCRIPTION_BLOCKED"
+        });
+      }
     }
 
     req.subscription = subscription;

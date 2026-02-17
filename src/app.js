@@ -1,5 +1,8 @@
 const express = require("express");
 
+/* =========================
+   IMPORTA ROTAS DOS MÓDULOS
+========================= */
 const authRoutes = require("./modules/auth/auth.routes");
 const vehicleRoutes = require("./modules/vehicles/vehicles.routes");
 const clientRoutes = require("./modules/clients/clients.routes");
@@ -14,9 +17,13 @@ const publicRoutes = require("./modules/public/public.routes");
 const imagesRoutes = require("./modules/images/images.routes");
 const integrationsRoutes = require("./modules/integrations/integrations.routes");
 const aiSellerRoutes = require("./modules/ai_seller/aiSeller.routes");
+const whatsappRoutes = require("./modules/whatsapp/whatsapp.routes");
 
 const app = express();
 
+/* =========================
+   MIDDLEWARES GLOBAIS
+========================= */
 app.use(express.json());
 
 /* =========================
@@ -27,7 +34,7 @@ app.get("/", (req, res) => {
 });
 
 /* =========================
-   ROTAS PRIVADAS
+   ROTAS PRIVADAS (CRM)
 ========================= */
 app.use("/api/auth", authRoutes);
 app.use("/api/vehicles", vehicleRoutes);
@@ -48,19 +55,24 @@ app.use("/api/integrations", integrationsRoutes);
 app.use("/api/ai-seller", aiSellerRoutes);
 
 /* =========================
+   WHATSAPP (WEBHOOK)
+========================= */
+app.use("/api/whatsapp", whatsappRoutes);
+
+/* =========================
    ROTAS PÚBLICAS
 ========================= */
 app.use("/public", publicRoutes);
 
 /* =========================
-   404
+   404 - ROTA NÃO ENCONTRADA
 ========================= */
 app.use((req, res) => {
   res.status(404).json({ error: "Rota não encontrada" });
 });
 
 /* =========================
-   ERROR HANDLER
+   ERROR HANDLER GLOBAL
 ========================= */
 app.use((err, req, res, next) => {
   console.error("Erro interno:", err);

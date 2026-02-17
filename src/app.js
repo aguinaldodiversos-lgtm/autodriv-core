@@ -19,6 +19,7 @@ const integrationsRoutes = require("./modules/integrations/integrations.routes")
 const aiSellerRoutes = require("./modules/ai_seller/aiSeller.routes");
 const whatsappRoutes = require("./modules/whatsapp/whatsapp.routes");
 const aiSettingsRoutes = require("./modules/ai_settings/aiSettings.routes");
+const devRoutes = require("./modules/dev/dev.routes");
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use("/api/maintenance", maintenanceRoutes);
 app.use("/api/ads", adsRoutes);
 app.use("/api/images", imagesRoutes);
 app.use("/api/integrations", integrationsRoutes);
+app.use("/api/dev", devRoutes);
 
 /* =========================
    VENDEDOR IA

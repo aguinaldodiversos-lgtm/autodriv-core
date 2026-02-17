@@ -1,209 +1,167 @@
 const pool = require("../../config/db");
-const engine = require("./conversation.engine");
+const buildPrompt = require("./aiSeller.prompt");
+const { OpenAI } = require("openai");
 
-/* =========================
-   DETECÇÃO DE INTENÇÃO DE VISITA
-========================= */
-function detectVisitIntent(message) {
-  const text = message.toLowerCase();
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
-  const keywords = [
-    "visitar",
-    "ver o carro",
-    "posso ir",
-    "passar aí",
-    "ir na loja",
-    "agendar",
-    "horário",
-    "quando posso ir",
-    "quero ver",
-    "quero conhecer",
-    "consigo ir",
-    "posso passar"
-  ];
-
-  return keywords.some(k => text.includes(k));
-}
-
-async function handleMessage(leadId, message) {
+async function processMessage({ lead_id, message }) {
+  // =============================
+  // BUSCA LEAD
+  // =============================
   const leadResult = await pool.query(
     `SELECT * FROM leads WHERE id = $1`,
-    [leadId]
+    [lead_id]
   );
 
   const lead = leadResult.rows[0];
-  if (!lead) throw new Error("Lead não encontrado");
 
-  /* =========================
-     BUSCA VEÍCULO
-  ========================== */
+  if (!lead) {
+    throw new Error("Lead não encontrado");
+  }
+
+  // =============================
+  // VERIFICA ASSINATURA
+  // =============================
+  const subResult = await pool.query(
+    `SELECT * FROM subscriptions
+     WHERE dealership_id = $1`,
+    [lead.dealership_id]
+  );
+
+  let subscription = subResult.rows[0];
+
+  // Se não existir, cria trial automático
+  if (!subscription) {
+    const trialEnd = new Date();
+    trialEnd.setDate(trialEnd.getDate() + 30);
+
+    await pool.query(
+      `INSERT INTO subscriptions
+       (dealership_id, email, plan, status, current_period_end)
+       VALUES ($1,'trial@autodriv.com','trial','active',$2)`,
+      [lead.dealership_id, trialEnd]
+    );
+
+    const newSub = await pool.query(
+      `SELECT * FROM subscriptions
+       WHERE dealership_id = $1`,
+      [lead.dealership_id]
+    );
+
+    subscription = newSub.rows[0];
+  }
+
+  // Bloqueia planos sem IA
+  if (!["master", "trial"].includes(subscription.plan)) {
+    return {
+      reply:
+        "Esse atendimento automático está disponível apenas no plano completo. Posso pedir para um vendedor entrar em contato?"
+    };
+  }
+
+  // =============================
+  // BUSCA VEÍCULO
+  // =============================
   const vehicleResult = await pool.query(
-    `SELECT
-        v.*,
-        s.seo_title,
-        s.seo_description
-     FROM vehicles v
-     LEFT JOIN vehicle_seo s
-       ON s.vehicle_id = v.id
-     WHERE v.id = $1`,
+    `SELECT * FROM vehicles WHERE id = $1`,
     [lead.vehicle_id]
   );
 
   const vehicle = vehicleResult.rows[0];
 
-  /* =========================
-     BUSCA MANUTENÇÕES
-  ========================== */
-  const maintenanceResult = await pool.query(
-    `SELECT t.title, t.status
-     FROM maintenance_tasks t
-     JOIN maintenance_orders o
-       ON o.id = t.order_id
-     WHERE o.vehicle_id = $1`,
-    [lead.vehicle_id]
-  );
-
-  const maintenanceTasks = maintenanceResult.rows;
-
-  /* =========================
-     SALVA MENSAGEM DO CLIENTE
-  ========================== */
-  await pool.query(
-    `INSERT INTO lead_conversations
-     (dealership_id, lead_id, role, message)
-     VALUES ($1,$2,'client',$3)`,
-    [lead.dealership_id, leadId, message]
-  );
-
-  /* =========================
-     ESTADO DA IA
-  ========================== */
+  // =============================
+  // BUSCA ESTADO DA IA
+  // =============================
   let stateResult = await pool.query(
-    `SELECT * FROM lead_ai_state WHERE lead_id = $1`,
-    [leadId]
+    `SELECT * FROM lead_ai_state
+     WHERE lead_id = $1`,
+    [lead_id]
   );
 
   let state = stateResult.rows[0];
 
   if (!state) {
-    const insert = await pool.query(
+    const insertState = await pool.query(
       `INSERT INTO lead_ai_state
-       (dealership_id, lead_id, stage)
-       VALUES ($1,$2,'new')
+       (lead_id, stage)
+       VALUES ($1,'new')
        RETURNING *`,
-      [lead.dealership_id, leadId]
+      [lead_id]
     );
-    state = insert.rows[0];
+
+    state = insertState.rows[0];
   }
 
-  /* =========================
-     DETECTA INTENÇÃO DE VISITA
-  ========================== */
-  const wantsVisit = detectVisitIntent(message);
+  // =============================
+  // DETECTA AGENDAMENTO
+  // =============================
+  const lowerMsg = message.toLowerCase();
 
-  if (wantsVisit) {
-    const visitDate = new Date();
-    visitDate.setDate(visitDate.getDate() + 1); // sugestão: amanhã
+  const visitIntent =
+    lowerMsg.includes("quero ver") ||
+    lowerMsg.includes("posso ver") ||
+    lowerMsg.includes("agendar") ||
+    lowerMsg.includes("visita") ||
+    lowerMsg.includes("amanhã") ||
+    lowerMsg.includes("hoje");
 
+  if (visitIntent && state.stage !== "visit_scheduled") {
     await pool.query(
       `UPDATE lead_ai_state
        SET stage = 'visit_scheduled',
-           visit_scheduled_at = $2,
-           updated_at = NOW()
+           visit_scheduled_at = NOW()
        WHERE lead_id = $1`,
-      [leadId, visitDate]
+      [lead_id]
     );
 
-    const reply =
-      "Perfeito! Vai ser um prazer te receber na loja. " +
-      "Posso te atender amanhã. Qual período é melhor para você, manhã ou tarde?";
-
+    // cria tarefa
     await pool.query(
-      `INSERT INTO lead_conversations
-       (dealership_id, lead_id, role, message)
-       VALUES ($1,$2,'ai',$3)`,
-      [lead.dealership_id, leadId, reply]
+      `INSERT INTO tasks
+       (dealership_id, lead_id, title, type, status)
+       VALUES ($1,$2,'Visita agendada','visit','pending')`,
+      [lead.dealership_id, lead_id]
     );
 
-    return { reply, visit_scheduled: true };
+    return {
+      reply:
+        "Perfeito! Vai ser um prazer te receber na loja. Nosso vendedor vai te atender pessoalmente e mostrar todos os detalhes do carro.",
+      visit_scheduled: true
+    };
   }
 
-  /* =========================
-     ÚLTIMAS MENSAGENS
-  ========================== */
-  const convo = await pool.query(
-    `SELECT role, message
-     FROM lead_conversations
-     WHERE lead_id = $1
-     ORDER BY id DESC
-     LIMIT 6`,
-    [leadId]
-  );
+  // =============================
+  // MONTA PROMPT
+  // =============================
+  const prompt = buildPrompt({
+    vehicle,
+    state
+  });
 
-  const messages = convo.rows
-    .reverse()
-    .map(m => ({
-      role: m.role === "client" ? "user" : "assistant",
-      content: m.message
-    }));
+  // =============================
+  // CHAMADA OPENAI
+  // =============================
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4.1-mini",
+    temperature: 0.5,
+    messages: [
+      {
+        role: "system",
+        content: prompt
+      },
+      {
+        role: "user",
+        content: message
+      }
+    ]
+  });
 
-  /* =========================
-     CONTEXTO DO VEÍCULO
-  ========================== */
-  const vehicleContext = {
-    brand: vehicle?.brand || "",
-    model: vehicle?.model || "",
-    year: vehicle?.year || "",
-    price: vehicle?.price || "",
-    mileage: vehicle?.mileage || "",
-    fuel: vehicle?.fuel || "",
-    transmission: vehicle?.transmission || "",
-    color: vehicle?.color || "",
-    description: vehicle?.description || "",
-    seo_description: vehicle?.seo_description || "",
-    documentation_status: vehicle?.documentation_status || "",
-    maintenance: maintenanceTasks.length
-      ? maintenanceTasks
-          .map(t => `${t.title} (${t.status})`)
-          .join(", ")
-      : ""
-  };
-
-  /* =========================
-     CHAMA IA
-  ========================== */
-  const reply = await engine.generateReply(
-    {
-      vehicle: vehicleContext,
-      state
-    },
-    messages
-  );
-
-  /* =========================
-     SALVA RESPOSTA DA IA
-  ========================== */
-  await pool.query(
-    `INSERT INTO lead_conversations
-     (dealership_id, lead_id, role, message)
-     VALUES ($1,$2,'ai',$3)`,
-    [lead.dealership_id, leadId, reply]
-  );
-
-  /* =========================
-     ATUALIZA ESTÁGIO
-  ========================== */
-  await pool.query(
-    `UPDATE lead_ai_state
-     SET stage = 'qualifying',
-         updated_at = NOW()
-     WHERE lead_id = $1`,
-    [leadId]
-  );
+  const reply = completion.choices[0].message.content;
 
   return { reply };
 }
 
 module.exports = {
-  handleMessage
+  processMessage
 };

@@ -37,7 +37,7 @@ module.exports = async function auth(req, res, next) {
     const dealershipId = user.dealership_id;
 
     /* =============================
-       BUSCA ASSINATURA
+       GARANTE ASSINATURA (UPSERT)
     ============================= */
     let subResult = await pool.query(
       `SELECT * FROM subscriptions
@@ -47,9 +47,6 @@ module.exports = async function auth(req, res, next) {
 
     let subscription = subResult.rows[0];
 
-    /* =============================
-       CRIA TRIAL SE NÃO EXISTIR
-    ============================= */
     if (!subscription) {
       const trialEnd = new Date();
       trialEnd.setDate(trialEnd.getDate() + 15);

@@ -148,6 +148,38 @@ function calculateLeadScore(state) {
 }
 
 /* =========================
+   TAREFA AUTOMÁTICA PARA LEAD HOT
+========================= */
+
+async function createHotLeadTask(leadId, dealershipId) {
+  // verifica se já existe tarefa pendente
+  const existing = await pool.query(
+    `SELECT id FROM tasks
+     WHERE lead_id = $1
+     AND status = 'pending'
+     LIMIT 1`,
+    [leadId]
+  );
+
+  if (existing.rows.length > 0) {
+    return;
+  }
+
+  // cria tarefa
+  await pool.query(
+    `INSERT INTO tasks
+     (dealership_id, lead_id, title, type, status, created_at)
+     VALUES ($1, $2, $3, $4, 'pending', NOW())`,
+    [
+      dealershipId,
+      leadId,
+      "Lead quente: entrar em contato",
+      "hot_lead"
+    ]
+  );
+}
+
+/* =========================
    SERVICE PRINCIPAL
 ========================= */
 
@@ -260,6 +292,13 @@ async function handleMessage(leadId, message) {
      WHERE lead_id = $1`,
     [leadId, leadScore]
   );
+
+  /* =========================
+     CRIA TAREFA PARA LEAD HOT
+  ========================== */
+  if (leadScore === "hot") {
+    await createHotLeadTask(leadId, lead.dealership_id);
+  }
 
   /* =========================
      BUSCA HISTÓRICO

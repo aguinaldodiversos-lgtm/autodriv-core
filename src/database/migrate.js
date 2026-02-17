@@ -21,7 +21,9 @@ const migrations = [
   require("./migrations/017_tasks"),
   require("./migrations/018_ai_settings"),
   require("./migrations/019_fix_subscription_plan"),
-  require("./migrations/020_normalize_subscriptions")
+  require("./migrations/020_normalize_subscriptions"),
+  require("./migrations/023_vehicle_entry_date"),
+
 ];
 
 async function runMigrations() {

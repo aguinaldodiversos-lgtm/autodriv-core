@@ -18,7 +18,8 @@ async function runMigrations() {
     require("./migrations/014_public_catalog"),
     require("./migrations/015_integrations"),
     require("./migrations/016_ai_seller"),
-    require("./migrations/017_tasks")
+    require("./migrations/017_tasks"),
+    require("./migrations/018_ai_settings")
   ];
 
   for (const migration of migrations) {

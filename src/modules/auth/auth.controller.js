@@ -24,7 +24,7 @@ async function register(req, res) {
         `INSERT INTO dealerships (name, email)
          VALUES ($1,$2)
          RETURNING *`,
-        [dealership_name, email] // ← CORREÇÃO AQUI
+        [dealership_name, email]
       );
 
       const dealership = dealershipResult.rows[0];
@@ -36,7 +36,7 @@ async function register(req, res) {
 
       const userResult = await client.query(
         `INSERT INTO users
-         (dealership_id, name, email, password, role)
+         (dealership_id, name, email, password_hash, role)
          VALUES ($1,$2,$3,$4,'admin')
          RETURNING *`,
         [
@@ -111,7 +111,7 @@ async function login(req, res) {
       return res.status(401).json({ error: "Usuário não encontrado" });
     }
 
-    const valid = await bcrypt.compare(password, user.password);
+    const valid = await bcrypt.compare(password, user.password_hash);
 
     if (!valid) {
       return res.status(401).json({ error: "Senha inválida" });

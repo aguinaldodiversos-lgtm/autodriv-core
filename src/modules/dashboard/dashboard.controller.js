@@ -1,93 +1,100 @@
 const pool = require("../../config/db");
+const {
+  getStockStatus,
+  calculateDaysInStock
+} = require("./stockIntelligence.service");
 
-async function getAlerts(req, res) {
+async function getDashboard(req, res) {
   try {
     const dealershipId = req.user.dealership_id;
 
     /* =========================
-       VISITAS AGENDADAS
+       ESTOQUE
     ========================== */
-    const visits = await pool.query(
-      `SELECT COUNT(*) 
-       FROM tasks
-       WHERE dealership_id = $1
-         AND type = 'visit'
-         AND status = 'pending'`,
-      [dealershipId]
-    );
-
-    /* =========================
-       LEADS SEM ATENDIMENTO
-    ========================== */
-    const leads = await pool.query(
-      `SELECT COUNT(*)
-       FROM leads
-       WHERE dealership_id = $1
-         AND status = 'new'`,
-      [dealershipId]
-    );
-
-    /* =========================
-       PROPOSTAS AGUARDANDO
-    ========================== */
-    const proposals = await pool.query(
-      `SELECT COUNT(*)
-       FROM proposals
-       WHERE dealership_id = $1
-         AND status = 'sent'`,
-      [dealershipId]
-    );
-
-    /* =========================
-       VEÍCULOS EM MANUTENÇÃO
-    ========================== */
-    const maintenance = await pool.query(
-      `SELECT COUNT(*)
+    const vehiclesResult = await pool.query(
+      `SELECT id, brand, model, entry_date
        FROM vehicles
        WHERE dealership_id = $1
-         AND status = 'maintenance'`,
+       AND status = 'available'`,
       [dealershipId]
     );
+
+    let stockSummary = {
+      healthy: 0,
+      attention: 0,
+      slow: 0,
+      critical: 0
+    };
+
+    let alerts = [];
+
+    vehiclesResult.rows.forEach((v) => {
+      const days = calculateDaysInStock(v.entry_date);
+      const stock = getStockStatus(days);
+
+      stockSummary[stock.status]++;
+
+      if (stock.status === "attention") {
+        alerts.push({
+          type: "stock",
+          level: "warning",
+          message: `${v.brand} ${v.model} com ${days} dias em estoque`
+        });
+      }
+
+      if (stock.status === "slow") {
+        alerts.push({
+          type: "stock",
+          level: "alert",
+          message: `${v.brand} ${v.model} com giro lento (${days} dias)`
+        });
+      }
+
+      if (stock.status === "critical") {
+        alerts.push({
+          type: "stock",
+          level: "critical",
+          message: `${v.brand} ${v.model} parado há ${days} dias`
+        });
+      }
+    });
 
     /* =========================
-       MENSALIDADE
+       LEADS
     ========================== */
-    const subscription = await pool.query(
-      `SELECT status, current_period_end
-       FROM subscriptions
-       WHERE dealership_id = $1`,
+    const leadsResult = await pool.query(
+      `SELECT COUNT(*) FROM leads
+       WHERE dealership_id = $1
+       AND status = 'new'`,
       [dealershipId]
     );
 
-    let billingAlert = false;
+    const newLeads = parseInt(leadsResult.rows[0].count);
 
-    if (subscription.rows.length) {
-      const sub = subscription.rows[0];
-      const now = new Date();
-      const end = new Date(sub.current_period_end);
-
-      const diffDays =
-        (now - end) / (1000 * 60 * 60 * 24);
-
-      if (diffDays > 0) {
-        billingAlert = true;
-      }
+    if (newLeads > 0) {
+      alerts.push({
+        type: "lead",
+        level: "warning",
+        message: `${newLeads} leads aguardando atendimento`
+      });
     }
 
+    /* =========================
+       RESPOSTA FINAL
+    ========================== */
     res.json({
-      visits_scheduled: parseInt(visits.rows[0].count),
-      leads_unattended: parseInt(leads.rows[0].count),
-      proposals_pending: parseInt(proposals.rows[0].count),
-      vehicles_in_maintenance: parseInt(maintenance.rows[0].count),
-      billing_alert: billingAlert
+      stock: stockSummary,
+      alerts
     });
 
   } catch (err) {
-    console.error("Erro dashboard alerts:", err);
-    res.status(500).json({ error: "Erro ao carregar alertas" });
+    console.error("Erro no dashboard:", err);
+    res.status(500).json({
+      error: "Erro ao carregar dashboard"
+    });
   }
 }
 
 module.exports = {
-  getAlerts
+  getDashboard
 };

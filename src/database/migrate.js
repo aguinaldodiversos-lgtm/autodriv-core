@@ -6,11 +6,8 @@ async function runMigrations() {
     require("./migrations/002_users"),
     require("./migrations/003_subscriptions"),
     require("./migrations/004_vehicles"),
-
-    // ordem real dos arquivos
     require("./migrations/005_vehicle_images"),
     require("./migrations/005_clients"),
-
     require("./migrations/006_leads"),
     require("./migrations/007_proposals"),
     require("./migrations/008_sales"),
@@ -23,9 +20,8 @@ async function runMigrations() {
     require("./migrations/015_integrations"),
     require("./migrations/016_ai_seller"),
     require("./migrations/017_tasks"),
-    require("./migrations/018_ai_settings")
-    require("./migrations/019_fix_subscription_plan"),
-
+    require("./migrations/018_ai_settings"),
+    require("./migrations/019_fix_subscription_plan")
   ];
 
   for (const migration of migrations) {

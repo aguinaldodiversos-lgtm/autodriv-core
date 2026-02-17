@@ -115,7 +115,7 @@ function detectStage(message, currentState) {
     return "ready_for_visit";
   }
 
-  // só considera pronto para visita se já tiver forma de pagamento e troca definida
+  // pronto para visita somente se já tiver pagamento e troca
   if (
     currentState.payment_type &&
     currentState.has_trade_in !== null
@@ -124,6 +124,27 @@ function detectStage(message, currentState) {
   }
 
   return "qualifying";
+}
+
+function calculateLeadScore(state) {
+  // HOT
+  if (
+    state.stage === "visit_scheduled" ||
+    (state.payment_type && state.budget_range)
+  ) {
+    return "hot";
+  }
+
+  // WARM
+  if (
+    state.stage === "qualifying" ||
+    state.payment_type
+  ) {
+    return "warm";
+  }
+
+  // COLD
+  return "cold";
 }
 
 /* =========================
@@ -216,6 +237,29 @@ async function handleMessage(leadId, message) {
   });
 
   await stateRepo.updateStage(leadId, newStage);
+
+  /* =========================
+     BUSCA ESTADO ATUALIZADO
+  ========================== */
+  const updatedStateResult = await pool.query(
+    `SELECT * FROM lead_ai_state WHERE lead_id = $1`,
+    [leadId]
+  );
+
+  const updatedState = updatedStateResult.rows[0];
+
+  /* =========================
+     ATUALIZA LEAD SCORE
+  ========================== */
+  const leadScore = calculateLeadScore(updatedState);
+
+  await pool.query(
+    `UPDATE lead_ai_state
+     SET lead_score = $2,
+         updated_at = NOW()
+     WHERE lead_id = $1`,
+    [leadId, leadScore]
+  );
 
   /* =========================
      BUSCA HISTÓRICO

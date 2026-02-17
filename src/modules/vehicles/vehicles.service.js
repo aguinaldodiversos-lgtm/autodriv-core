@@ -6,22 +6,56 @@ const {
   buildSeoDescription
 } = require("../../utils/seo");
 
+function validateVehicleData(data) {
+  if (!data.brand) throw new Error("Marca é obrigatória");
+  if (!data.model) throw new Error("Modelo é obrigatório");
+  if (!data.year) throw new Error("Ano é obrigatório");
+  if (!data.price) throw new Error("Preço é obrigatório");
+}
+
 async function createVehicle(data, user) {
+  validateVehicleData(data);
+
+  const dealershipId = user.dealership_id;
+
+  if (!dealershipId) {
+    throw new Error("Usuário sem dealership_id");
+  }
+
   const dealershipResult = await pool.query(
     `SELECT * FROM dealerships WHERE id = $1`,
-    [user.dealershipId]
+    [dealershipId]
   );
 
   const dealership = dealershipResult.rows[0];
 
-  const slug = buildVehicleSlug(data);
+  if (!dealership) {
+    throw new Error("Concessionária não encontrada");
+  }
 
-  const seoTitle = buildSeoTitle(data, dealership);
-  const seoDescription = buildSeoDescription(data, dealership);
+  // título automático
+  const title =
+    data.title ||
+    `${data.brand} ${data.model} ${data.year}`;
+
+  const slug = buildVehicleSlug({
+    ...data,
+    title
+  });
+
+  const seoTitle = buildSeoTitle(
+    { ...data, title },
+    dealership
+  );
+
+  const seoDescription = buildSeoDescription(
+    { ...data, title },
+    dealership
+  );
 
   return repo.create({
-    dealership_id: user.dealershipId,
-    title: data.title,
+    dealership_id: dealershipId,
+    title,
     brand: data.brand,
     model: data.model,
     year: data.year,
@@ -33,7 +67,13 @@ async function createVehicle(data, user) {
 }
 
 async function listVehicles(user) {
-  return repo.findAll(user.dealershipId);
+  const dealershipId = user.dealership_id;
+
+  if (!dealershipId) {
+    throw new Error("Usuário sem dealership_id");
+  }
+
+  return repo.findAll(dealershipId);
 }
 
 module.exports = {

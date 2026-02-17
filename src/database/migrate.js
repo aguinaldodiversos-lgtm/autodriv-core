@@ -24,6 +24,8 @@ async function runMigrations() {
     require("./migrations/016_ai_seller"),
     require("./migrations/017_tasks"),
     require("./migrations/018_ai_settings")
+    require("./migrations/019_fix_subscription_plan"),
+
   ];
 
   for (const migration of migrations) {

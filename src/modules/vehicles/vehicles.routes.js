@@ -3,56 +3,26 @@ const router = express.Router();
 
 const auth = require("../../middlewares/auth");
 
-const {
-  getVehicles,
-  getVehicleById,
-  createVehicle,
-  updateVehicle,
-  deleteVehicle,
-  applyVehicleSuggestion
-} = require("./vehicles.controller");
+const controller = require("./vehicles.controller");
 
 /* =========================
-   LISTAR VEÍCULOS
-   GET /api/vehicles
+   ROTAS
 ========================= */
-router.get("/", auth, getVehicles);
 
-/* =========================
-   BUSCAR VEÍCULO POR ID
-   GET /api/vehicles/:id
-========================= */
-router.get("/:id", auth, getVehicleById);
+router.get("/", auth, controller.getVehicles);
 
-/* =========================
-   CRIAR VEÍCULO
-   POST /api/vehicles
-========================= */
-router.post("/", auth, createVehicle);
+router.get("/:id", auth, controller.getVehicleById);
 
-/* =========================
-   ATUALIZAR VEÍCULO
-   PUT /api/vehicles/:id
-========================= */
-router.put("/:id", auth, updateVehicle);
+router.post("/", auth, controller.createVehicle);
 
-/* =========================
-   EXCLUIR VEÍCULO
-   DELETE /api/vehicles/:id
-========================= */
-router.delete("/:id", auth, deleteVehicle);
+router.put("/:id", auth, controller.updateVehicle);
 
-/* =========================
-   APLICAR SUGESTÃO AUTOMÁTICA
-   - gera anúncio com IA
-   - envia para Carros na Cidade
-   - destaca veículo
-   POST /api/vehicles/:id/apply-suggestion
-========================= */
+router.delete("/:id", auth, controller.deleteVehicle);
+
 router.post(
   "/:id/apply-suggestion",
   auth,
-  applyVehicleSuggestion
+  controller.applyVehicleSuggestion
 );
 
 module.exports = router;

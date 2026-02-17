@@ -16,7 +16,7 @@ module.exports = {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
-
+    
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_finance_dealership
       ON finance_entries(dealership_id);

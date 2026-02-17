@@ -95,20 +95,22 @@ async function handleMessage(leadId, message) {
      MONTA CONTEXTO DO VEÍCULO
   ========================== */
   const vehicleContext = {
-    brand: vehicle.brand,
-    model: vehicle.model,
-    year: vehicle.year,
-    price: vehicle.price,
-    mileage: vehicle.mileage,
-    fuel: vehicle.fuel,
-    transmission: vehicle.transmission,
-    color: vehicle.color,
-    description: vehicle.description,
-    seo_description: vehicle.seo_description,
-    documentation_status: vehicle.documentation_status,
-    maintenance: maintenanceTasks
-      .map(t => `${t.title} (${t.status})`)
-      .join(", ")
+    brand: vehicle?.brand || "",
+    model: vehicle?.model || "",
+    year: vehicle?.year || "",
+    price: vehicle?.price || "",
+    mileage: vehicle?.mileage || "",
+    fuel: vehicle?.fuel || "",
+    transmission: vehicle?.transmission || "",
+    color: vehicle?.color || "",
+    description: vehicle?.description || "",
+    seo_description: vehicle?.seo_description || "",
+    documentation_status: vehicle?.documentation_status || "",
+    maintenance: maintenanceTasks.length
+      ? maintenanceTasks
+          .map(t => `${t.title} (${t.status})`)
+          .join(", ")
+      : ""
   };
 
   /* =========================

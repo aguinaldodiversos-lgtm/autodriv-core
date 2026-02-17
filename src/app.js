@@ -13,16 +13,22 @@ const adsRoutes = require("./modules/ads/ads.routes");
 const publicRoutes = require("./modules/public/public.routes");
 const imagesRoutes = require("./modules/images/images.routes");
 const integrationsRoutes = require("./modules/integrations/integrations.routes");
+const aiSellerRoutes = require("./modules/ai_seller/aiSeller.routes");
 
 const app = express();
 
 app.use(express.json());
 
+/* =========================
+   HEALTH CHECK
+========================= */
 app.get("/", (req, res) => {
   res.send("AutoDriv Core API");
 });
 
-/* ROTAS PRIVADAS */
+/* =========================
+   ROTAS PRIVADAS
+========================= */
 app.use("/api/auth", authRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/clients", clientRoutes);
@@ -36,13 +42,26 @@ app.use("/api/ads", adsRoutes);
 app.use("/api/images", imagesRoutes);
 app.use("/api/integrations", integrationsRoutes);
 
-/* ROTAS PÚBLICAS */
+/* =========================
+   VENDEDOR IA
+========================= */
+app.use("/api/ai-seller", aiSellerRoutes);
+
+/* =========================
+   ROTAS PÚBLICAS
+========================= */
 app.use("/public", publicRoutes);
 
+/* =========================
+   404
+========================= */
 app.use((req, res) => {
   res.status(404).json({ error: "Rota não encontrada" });
 });
 
+/* =========================
+   ERROR HANDLER
+========================= */
 app.use((err, req, res, next) => {
   console.error("Erro interno:", err);
   res.status(500).json({ error: "Erro interno do servidor" });

@@ -9,6 +9,7 @@ module.exports = async function auth(req, res, next) {
       return res.status(401).json({ error: "Token não informado" });
     }
 
+    
     const token = header.split(" ")[1];
 
     let decoded;

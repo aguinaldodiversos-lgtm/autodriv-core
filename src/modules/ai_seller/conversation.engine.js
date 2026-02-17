@@ -1,12 +1,12 @@
 const OpenAI = require("openai");
-const buildPrompt = require("./aiSeller.prompt");
+const prompt = require("./aiSeller.prompt");
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
 async function generateReply(context, messages) {
-  const systemPrompt = buildPrompt(context);
+  const systemPrompt = prompt;
 
   const response = await client.chat.completions.create({
     model: "gpt-4.1-mini",
@@ -14,8 +14,8 @@ async function generateReply(context, messages) {
       { role: "system", content: systemPrompt },
       ...messages
     ],
-    max_tokens: 120,
-    temperature: 0.4
+    max_tokens: 160,
+    temperature: 0.7
   });
 
   return response.choices[0].message.content;

@@ -4,7 +4,7 @@ const convoRepo = require("../lead_conversations/leadConversations.repository");
 const stateRepo = require("../lead_ai_state/leadAiState.repository");
 
 /* =========================
-   DETECÇÃO DE QUALIFICAÇÃO
+   DETECÇÕES BÁSICAS
 ========================= */
 
 function detectPaymentType(message) {
@@ -43,6 +43,54 @@ function detectTradeIn(message) {
   return null;
 }
 
+function detectName(message) {
+  const match = message.match(/meu nome é ([a-zA-ZÀ-ÿ]+)/i);
+  if (match) return match[1];
+  return null;
+}
+
+function detectUsage(message) {
+  const msg = message.toLowerCase();
+
+  if (msg.includes("trabalho") || msg.includes("dia a dia")) {
+    return "daily_use";
+  }
+
+  if (msg.includes("família") || msg.includes("familia")) {
+    return "family";
+  }
+
+  if (msg.includes("viagem") || msg.includes("estrada")) {
+    return "travel";
+  }
+
+  return null;
+}
+
+function detectBudget(message) {
+  const match = message.match(/(\d{3,5})/);
+  if (match) return match[1];
+  return null;
+}
+
+function detectTimeline(message) {
+  const msg = message.toLowerCase();
+
+  if (msg.includes("esse mês") || msg.includes("esse mes")) {
+    return "this_month";
+  }
+
+  if (msg.includes("ano que vem")) {
+    return "next_year";
+  }
+
+  if (msg.includes("semana") || msg.includes("logo")) {
+    return "soon";
+  }
+
+  return null;
+}
+
 function detectStage(message, currentState) {
   const msg = message.toLowerCase();
 
@@ -67,8 +115,11 @@ function detectStage(message, currentState) {
     return "ready_for_visit";
   }
 
-  // se já tem forma de pagamento definida
-  if (currentState.payment_type) {
+  // só considera pronto para visita se já tiver forma de pagamento e troca definida
+  if (
+    currentState.payment_type &&
+    currentState.has_trade_in !== null
+  ) {
     return "ready_for_visit";
   }
 
@@ -116,6 +167,10 @@ async function handleMessage(leadId, message) {
   ========================== */
   const paymentType = detectPaymentType(message);
   const tradeIn = detectTradeIn(message);
+  const clientName = detectName(message);
+  const usageProfile = detectUsage(message);
+  const budget = detectBudget(message);
+  const timeline = detectTimeline(message);
 
   let updatedPaymentType = state.payment_type;
   let updatedTradeIn = state.has_trade_in;
@@ -129,22 +184,35 @@ async function handleMessage(leadId, message) {
   }
 
   /* =========================
-     ATUALIZA ESTADO FINANCEIRO
+     ATUALIZA ESTADO NO BANCO
   ========================== */
   await pool.query(
     `UPDATE lead_ai_state
      SET payment_type = COALESCE($2, payment_type),
          has_trade_in = COALESCE($3, has_trade_in),
+         client_name = COALESCE($4, client_name),
+         usage_profile = COALESCE($5, usage_profile),
+         budget_range = COALESCE($6, budget_range),
+         purchase_timeline = COALESCE($7, purchase_timeline),
          updated_at = NOW()
      WHERE lead_id = $1`,
-    [leadId, updatedPaymentType, updatedTradeIn]
+    [
+      leadId,
+      updatedPaymentType,
+      updatedTradeIn,
+      clientName,
+      usageProfile,
+      budget,
+      timeline
+    ]
   );
 
   /* =========================
      ATUALIZA STAGE
   ========================== */
   const newStage = detectStage(message, {
-    payment_type: updatedPaymentType
+    payment_type: updatedPaymentType,
+    has_trade_in: updatedTradeIn
   });
 
   await stateRepo.updateStage(leadId, newStage);

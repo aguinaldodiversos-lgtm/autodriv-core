@@ -1,7 +1,7 @@
 const express = require("express");
 
 /* =========================
-   IMPORTA ROTAS DOS MÓDULOS
+   IMPORTAÇÃO DE ROTAS
 ========================= */
 const authRoutes = require("./modules/auth/auth.routes");
 const vehicleRoutes = require("./modules/vehicles/vehicles.routes");
@@ -18,6 +18,7 @@ const imagesRoutes = require("./modules/images/images.routes");
 const integrationsRoutes = require("./modules/integrations/integrations.routes");
 const aiSellerRoutes = require("./modules/ai_seller/aiSeller.routes");
 const whatsappRoutes = require("./modules/whatsapp/whatsapp.routes");
+const aiSettingsRoutes = require("./modules/ai_settings/aiSettings.routes");
 
 const app = express();
 
@@ -53,6 +54,11 @@ app.use("/api/integrations", integrationsRoutes);
    VENDEDOR IA
 ========================= */
 app.use("/api/ai-seller", aiSellerRoutes);
+
+/* =========================
+   CONFIGURAÇÕES DA IA
+========================= */
+app.use("/api/ai-settings", aiSettingsRoutes);
 
 /* =========================
    WHATSAPP (WEBHOOK)

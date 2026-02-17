@@ -18,7 +18,7 @@ module.exports = async function auth(req, res, next) {
       return res.status(401).json({ error: "Token inválido" });
     }
 
-    const { user_id, dealership_id } = decoded;
+    const { user_id } = decoded;
 
     /* =============================
        BUSCA USUÁRIO
@@ -34,12 +34,7 @@ module.exports = async function auth(req, res, next) {
       return res.status(401).json({ error: "Usuário não encontrado" });
     }
 
-    // segurança extra
-    if (user.dealership_id !== dealership_id) {
-      return res.status(403).json({
-        error: "Token inválido para esta loja"
-      });
-    }
+    const dealershipId = user.dealership_id;
 
     /* =============================
        BUSCA ASSINATURA
@@ -47,7 +42,7 @@ module.exports = async function auth(req, res, next) {
     let subResult = await pool.query(
       `SELECT * FROM subscriptions
        WHERE dealership_id = $1`,
-      [dealership_id]
+      [dealershipId]
     );
 
     let subscription = subResult.rows[0];
@@ -63,13 +58,13 @@ module.exports = async function auth(req, res, next) {
         `INSERT INTO subscriptions
          (dealership_id, email, plan, status, current_period_end)
          VALUES ($1,$2,'trial','active',$3)`,
-        [dealership_id, user.email, trialEnd]
+        [dealershipId, user.email, trialEnd]
       );
 
       const newSub = await pool.query(
         `SELECT * FROM subscriptions
          WHERE dealership_id = $1`,
-        [dealership_id]
+        [dealershipId]
       );
 
       subscription = newSub.rows[0];
@@ -90,15 +85,14 @@ module.exports = async function auth(req, res, next) {
     if (now > end) {
       const diffDays = (now - end) / (1000 * 60 * 60 * 24);
 
-      if (diffDays <= 5) {
-        req.subscription_status = "grace";
-     (inare)
-      } else {
+      if (diffDays > 5) {
         return res.status(403).json({
           error: "Assinatura bloqueada",
           code: "SUBSCRIPTION_BLOCKED"
         });
       }
+
+      req.subscription_status = "grace";
     }
 
     req.user = user;

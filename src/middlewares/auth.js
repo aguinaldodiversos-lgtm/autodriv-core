@@ -5,11 +5,11 @@ module.exports = async function auth(req, res, next) {
   try {
     const header = req.headers.authorization;
 
-    if (!header) {
+    if (!header || !header.startsWith("Bearer ")) {
       return res.status(401).json({ error: "Token não informado" });
     }
 
-    const token = header.replace("Bearer ", "");
+    const token = header.split(" ")[1];
 
     let decoded;
     try {
@@ -18,17 +18,14 @@ module.exports = async function auth(req, res, next) {
       return res.status(401).json({ error: "Token inválido" });
     }
 
-    req.user = decoded;
-
-    const dealershipId = decoded.dealership_id;
-    const userId = decoded.user_id;
+    const { user_id, dealership_id } = decoded;
 
     /* =============================
        BUSCA USUÁRIO
     ============================= */
     const userResult = await pool.query(
       `SELECT * FROM users WHERE id = $1`,
-      [userId]
+      [user_id]
     );
 
     const user = userResult.rows[0];
@@ -37,29 +34,23 @@ module.exports = async function auth(req, res, next) {
       return res.status(401).json({ error: "Usuário não encontrado" });
     }
 
+    // segurança extra
+    if (user.dealership_id !== dealership_id) {
+      return res.status(403).json({
+        error: "Token inválido para esta loja"
+      });
+    }
+
     /* =============================
        BUSCA ASSINATURA
     ============================= */
     let subResult = await pool.query(
       `SELECT * FROM subscriptions
        WHERE dealership_id = $1`,
-      [dealershipId]
+      [dealership_id]
     );
 
     let subscription = subResult.rows[0];
-
-    /* =============================
-       FALLBACK: BUSCA PELO EMAIL
-    ============================= */
-    if (!subscription) {
-      const subByEmail = await pool.query(
-        `SELECT * FROM subscriptions
-         WHERE email = $1`,
-        [user.email]
-      );
-
-      subscription = subByEmail.rows[0];
-    }
 
     /* =============================
        CRIA TRIAL SE NÃO EXISTIR
@@ -72,13 +63,13 @@ module.exports = async function auth(req, res, next) {
         `INSERT INTO subscriptions
          (dealership_id, email, plan, status, current_period_end)
          VALUES ($1,$2,'trial','active',$3)`,
-        [dealershipId, user.email, trialEnd]
+        [dealership_id, user.email, trialEnd]
       );
 
       const newSub = await pool.query(
         `SELECT * FROM subscriptions
          WHERE dealership_id = $1`,
-        [dealershipId]
+        [dealership_id]
       );
 
       subscription = newSub.rows[0];
@@ -101,6 +92,7 @@ module.exports = async function auth(req, res, next) {
 
       if (diffDays <= 5) {
         req.subscription_status = "grace";
+     (inare)
       } else {
         return res.status(403).json({
           error: "Assinatura bloqueada",
@@ -109,6 +101,7 @@ module.exports = async function auth(req, res, next) {
       }
     }
 
+    req.user = user;
     req.subscription = subscription;
 
     next();

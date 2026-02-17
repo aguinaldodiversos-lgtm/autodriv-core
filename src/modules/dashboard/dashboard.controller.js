@@ -4,15 +4,19 @@ const {
   calculateDaysInStock
 } = require("./stockIntelligence.service");
 
+const {
+  getPriceIntelligence
+} = require("../vehicles/priceIntelligence.service");
+
 async function getDashboard(req, res) {
   try {
     const dealershipId = req.user.dealership_id;
 
     /* =========================
-       ESTOQUE
+       ESTOQUE + PREÇO INTELIGENTE
     ========================== */
     const vehiclesResult = await pool.query(
-      `SELECT id, brand, model, entry_date
+      `SELECT id, brand, model, entry_date, price, fipe_price
        FROM vehicles
        WHERE dealership_id = $1
        AND status = 'available'`,
@@ -34,6 +38,9 @@ async function getDashboard(req, res) {
 
       stockSummary[stock.status]++;
 
+      /* =========================
+         ALERTAS DE ESTOQUE
+      ========================== */
       if (stock.status === "attention") {
         alerts.push({
           type: "stock",
@@ -55,6 +62,30 @@ async function getDashboard(req, res) {
           type: "stock",
           level: "critical",
           message: `${v.brand} ${v.model} parado há ${days} dias`
+        });
+      }
+
+      /* =========================
+         PREÇO INTELIGENTE
+      ========================== */
+      const priceIntel = getPriceIntelligence(
+        v.price,
+        v.fipe_price
+      );
+
+      if (priceIntel.status === "overpriced") {
+        alerts.push({
+          type: "price",
+          level: "critical",
+          message: `${v.brand} ${v.model} está ${priceIntel.difference}% acima da FIPE`
+        });
+      }
+
+      if (priceIntel.status === "above_market") {
+        alerts.push({
+          type: "price",
+          level: "warning",
+          message: `${v.brand} ${v.model} está ${priceIntel.difference}% acima da FIPE`
         });
       }
     });

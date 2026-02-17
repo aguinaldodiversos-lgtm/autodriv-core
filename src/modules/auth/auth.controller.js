@@ -21,10 +21,10 @@ async function register(req, res) {
          CRIA LOJA
       ========================== */
       const dealershipResult = await client.query(
-        `INSERT INTO dealerships (name)
-         VALUES ($1)
+        `INSERT INTO dealerships (name, email)
+         VALUES ($1,$2)
          RETURNING *`,
-        [dealership_name]
+        [dealership_name, email] // ← CORREÇÃO AQUI
       );
 
       const dealership = dealershipResult.rows[0];
@@ -61,7 +61,7 @@ async function register(req, res) {
          VALUES ($1,$2,'trial','active',$3)`,
         [
           dealership.id,
-          email,          // ← aqui estava o erro
+          email,
           trialEnd
         ]
       );

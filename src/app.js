@@ -19,6 +19,9 @@ const vehiclesRoutes = require("./modules/vehicles/vehicles.routes");
 // Leads
 const leadsRoutes = require("./modules/leads/leads.routes");
 
+// Importação de leads (CSV)
+const leadsImportRoutes = require("./modules/leads_import/leadsImport.routes");
+
 // AI Seller
 const aiSellerRoutes = require("./modules/ai_seller/aiSeller.routes");
 
@@ -31,8 +34,13 @@ const dashboardRoutes = require("./modules/dashboard/dashboard.routes");
 // Tasks
 const tasksRoutes = require("./modules/tasks/tasks.routes");
 
+/* =========================
+   REGISTRO DAS ROTAS
+========================= */
+
 app.use("/api/vehicles", vehiclesRoutes);
 app.use("/api/leads", leadsRoutes);
+app.use("/api/leads-import", leadsImportRoutes);
 app.use("/api/ai-seller", aiSellerRoutes);
 app.use("/api/ai-settings", aiSettingsRoutes);
 app.use("/api/dashboard", dashboardRoutes);

@@ -1,31 +1,32 @@
 const service = require("./leads.service");
 
+/* =========================
+   CRIAR LEAD
+========================= */
 async function create(req, res) {
   try {
     const lead = await service.createLead(req.body, req.user);
-    res.status(201).json(lead);
+    res.json(lead);
   } catch (err) {
-    console.error("CREATE LEAD ERROR:", err);
-
-    const status =
-      err.message.includes("obrigatório")
-        ? 400
-        : 500;
-
-    res.status(status).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 }
 
+/* =========================
+   LISTAR LEADS
+========================= */
 async function list(req, res) {
   try {
     const leads = await service.listLeads(req.user);
     res.json(leads);
   } catch (err) {
-    console.error("LIST LEADS ERROR:", err);
-    res.status(500).json({ error: "Erro ao listar leads" });
+    res.status(400).json({ error: err.message });
   }
 }
 
+/* =========================
+   ATUALIZAR LEAD
+========================= */
 async function update(req, res) {
   try {
     const lead = await service.updateLead(
@@ -35,17 +36,33 @@ async function update(req, res) {
     );
     res.json(lead);
   } catch (err) {
-    console.error("UPDATE LEAD ERROR:", err);
     res.status(400).json({ error: err.message });
   }
 }
 
+/* =========================
+   REMOVER LEAD
+========================= */
 async function remove(req, res) {
   try {
     await service.deleteLead(req.params.id, req.user);
     res.json({ success: true });
   } catch (err) {
-    console.error("DELETE LEAD ERROR:", err);
+    res.status(400).json({ error: err.message });
+  }
+}
+
+/* =========================
+   REATIVAR LEAD COM IA
+========================= */
+async function reactivate(req, res) {
+  try {
+    const result = await service.reactivateLead(
+      req.params.id,
+      req.user
+    );
+    res.json(result);
+  } catch (err) {
     res.status(400).json({ error: err.message });
   }
 }
@@ -54,5 +71,6 @@ module.exports = {
   create,
   list,
   update,
-  remove
+  remove,
+  reactivate
 };

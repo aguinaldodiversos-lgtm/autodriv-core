@@ -1,25 +1,25 @@
-const app = require("./app");
-const { runFollowUp } = require("./workers/followup.worker");
+require("dotenv").config();
+
+const app = require("./src/app");
 
 const PORT = process.env.PORT || 10000;
 
 /* =========================
-   INICIA SERVIDOR
+   INICIAR SERVIDOR
 ========================= */
 app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
+  console.log("=================================");
+  console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  console.log("=================================");
 });
 
 /* =========================
-   FOLLOW-UP AUTOMÁTICO
-   roda a cada 30 minutos
+   TRATAMENTO DE ERROS GLOBAIS
 ========================= */
-setInterval(() => {
-  runFollowUp()
-    .then(() => {
-      console.log("Follow-up executado com sucesso");
-    })
-    .catch((err) => {
-      console.error("Erro no follow-up:", err);
-    });
-}, 1000 * 60 * 30);
+process.on("unhandledRejection", (err) => {
+  console.error("Erro não tratado (Promise):", err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Exceção não capturada:", err);
+});

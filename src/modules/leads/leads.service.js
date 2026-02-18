@@ -1,110 +1,150 @@
-const repo = require("./leads.repository");
 const pool = require("../../config/db");
-const convoRepo = require("../lead_conversations/leadConversations.repository");
+const followupService = require("../followups/followup.service");
 
-/* =========================
-   CRIAR LEAD
-========================= */
-async function createLead(data, user) {
-  // validação mínima
-  if (!data.vehicle_id && !data.client_phone) {
-    throw new Error(
-      "Informe vehicle_id ou pelo menos client_phone para criar o lead"
-    );
+/* =========================================
+   CRIAR LEAD (MANUAL OU SISTEMA)
+========================================= */
+async function createLead(data, user, source = "manual") {
+  const {
+    name,
+    phone,
+    email,
+    vehicle_id,
+    notes
+  } = data;
+
+  if (!phone) {
+    throw new Error("Telefone é obrigatório");
   }
 
-  const lead = await repo.create({
-    dealership_id: user.dealership_id,
-    client_id: data.client_id || null,
-    vehicle_id: data.vehicle_id || null,
-    assigned_user_id: data.assigned_user_id || user.id,
-    source: data.source || "manual",
-    status: data.status || "new",
-    notes: data.notes || null,
-    client_name: data.client_name || null,
-    client_phone: data.client_phone || null,
-    origin: data.origin || "manual"
-  });
-
-  // garante estado da IA
-  await pool.query(
-    `INSERT INTO lead_ai_state
-     (dealership_id, lead_id, stage, followup_step, created_at, updated_at)
-     VALUES ($1,$2,'new',0,NOW(),NOW())
-     ON CONFLICT (lead_id) DO NOTHING`,
-    [lead.dealership_id, lead.id]
+  // evita duplicidade por telefone na mesma loja
+  const existing = await pool.query(
+    `SELECT * FROM leads
+     WHERE dealership_id = $1
+     AND phone = $2`,
+    [user.dealership_id, phone]
   );
+
+  if (existing.rows.length) {
+    return existing.rows[0];
+  }
+
+  const result = await pool.query(
+    `INSERT INTO leads
+     (dealership_id, name, phone, email, vehicle_id, notes, status, source, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,'new',$7,NOW())
+     RETURNING *`,
+    [
+      user.dealership_id,
+      name || "Lead Manual",
+      phone,
+      email || null,
+      vehicle_id || null,
+      notes || null,
+      source
+    ]
+  );
+
+  const lead = result.rows[0];
+
+  /* =========================================
+     AGENDAR FOLLOWUPS AUTOMÁTICOS
+     Manual começa do Dia 3
+  ========================================= */
+  try {
+    await followupService.scheduleLeadFollowups(lead, "manual");
+  } catch (err) {
+    console.error("Erro ao agendar follow-ups:", err);
+  }
 
   return lead;
 }
 
-/* =========================
-   LISTAR LEADS
-========================= */
-async function listLeads(user) {
-  return repo.findAll(user.dealership_id);
+/* =========================================
+   BUSCAR LEADS DA LOJA
+========================================= */
+async function getLeads(user) {
+  const result = await pool.query(
+    `SELECT *
+     FROM leads
+     WHERE dealership_id = $1
+     ORDER BY created_at DESC`,
+    [user.dealership_id]
+  );
+
+  return result.rows;
 }
 
-/* =========================
-   ATUALIZAR LEAD
-========================= */
-async function updateLead(id, data, user) {
-  return repo.update(id, user.dealership_id, data);
-}
-
-/* =========================
-   REMOVER LEAD
-========================= */
-async function deleteLead(id, user) {
-  return repo.remove(id, user.dealership_id);
-}
-
-/* =========================
-   REATIVAR LEAD
-========================= */
-async function reactivateLead(leadId, user) {
-  const leadResult = await pool.query(
-    `SELECT * FROM leads
+/* =========================================
+   BUSCAR LEAD POR ID
+========================================= */
+async function getLeadById(id, user) {
+  const result = await pool.query(
+    `SELECT *
+     FROM leads
      WHERE id = $1
      AND dealership_id = $2`,
-    [leadId, user.dealership_id]
+    [id, user.dealership_id]
   );
 
-  const lead = leadResult.rows[0];
-  if (!lead) throw new Error("Lead não encontrado");
+  if (!result.rows.length) {
+    throw new Error("Lead não encontrado");
+  }
 
-  // reinicia follow-up
-  await pool.query(
-    `UPDATE lead_ai_state
-     SET followup_step = 0,
-         stage = 'new',
+  return result.rows[0];
+}
+
+/* =========================================
+   ATUALIZAR STATUS DO LEAD
+========================================= */
+async function updateLeadStatus(id, status, user) {
+  const result = await pool.query(
+    `UPDATE leads
+     SET status = $1,
          updated_at = NOW()
-     WHERE lead_id = $1`,
-    [leadId]
+     WHERE id = $2
+     AND dealership_id = $3
+     RETURNING *`,
+    [status, id, user.dealership_id]
   );
 
-  // mensagem inicial de reativação
-  const message = `Olá! Tudo bem?
-Vi que você tinha interesse em um carro.
-Ainda está procurando algo para o dia a dia ou já resolveu por aí?`;
+  if (!result.rows.length) {
+    throw new Error("Lead não encontrado");
+  }
 
-  await convoRepo.addMessage({
-    dealership_id: lead.dealership_id,
-    lead_id: leadId,
-    role: "ai",
-    message
-  });
+  return result.rows[0];
+}
 
-  return {
-    success: true,
-    message: "Lead reativado com sucesso"
-  };
+/* =========================================
+   REATIVAR LEAD ANTIGO
+========================================= */
+async function reactivateLead(id, user) {
+  const result = await pool.query(
+    `UPDATE leads
+     SET status = 'reactivated',
+         updated_at = NOW()
+     WHERE id = $1
+     AND dealership_id = $2
+     RETURNING *`,
+    [id, user.dealership_id]
+  );
+
+  if (!result.rows.length) {
+    throw new Error("Lead não encontrado");
+  }
+
+  const lead = result.rows[0];
+
+  // agenda follow-ups começando do Dia 3
+  await followupService.scheduleLeadFollowups(lead, "manual");
+
+  return lead;
 }
 
 module.exports = {
   createLead,
-  listLeads,
-  updateLead,
-  deleteLead,
+  getLeads,
+  getLeadById,
+  updateLeadStatus,
   reactivateLead
 };

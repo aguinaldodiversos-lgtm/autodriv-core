@@ -108,7 +108,7 @@ async function alerts(req, res) {
         });
       }
 
-      // IA não conseguiu avançar
+      // IA travada
       if (lead.stage === "responded" && diffHours > 48) {
         alerts.push({
           type: "ai_stuck",
@@ -125,8 +125,75 @@ async function alerts(req, res) {
   }
 }
 
+/* =========================
+   PREVISÃO DE VENDAS
+========================= */
+async function forecast(req, res) {
+  try {
+    const dealershipId = req.user.dealership_id;
+
+    const result = await pool.query(
+      `
+      SELECT
+        s.stage,
+        COUNT(*) AS total
+      FROM lead_ai_state s
+      JOIN leads l
+        ON l.id = s.lead_id
+      WHERE l.dealership_id = $1
+      GROUP BY s.stage
+      `,
+      [dealershipId]
+    );
+
+    const counts = {
+      qualifying: 0,
+      ready_for_visit: 0,
+      visit_scheduled: 0
+    };
+
+    for (const row of result.rows) {
+      if (counts[row.stage] !== undefined) {
+        counts[row.stage] = parseInt(row.total);
+      }
+    }
+
+    const forecastData = {
+      qualifying: {
+        leads: counts.qualifying,
+        conversion_rate: 0.1,
+        expected_sales: Math.round(counts.qualifying * 0.1)
+      },
+      ready_for_visit: {
+        leads: counts.ready_for_visit,
+        conversion_rate: 0.25,
+        expected_sales: Math.round(counts.ready_for_visit * 0.25)
+      },
+      visit_scheduled: {
+        leads: counts.visit_scheduled,
+        conversion_rate: 0.4,
+        expected_sales: Math.round(counts.visit_scheduled * 0.4)
+      }
+    };
+
+    const totalForecast =
+      forecastData.qualifying.expected_sales +
+      forecastData.ready_for_visit.expected_sales +
+      forecastData.visit_scheduled.expected_sales;
+
+    res.json({
+      ...forecastData,
+      total_forecast: totalForecast
+    });
+  } catch (err) {
+    console.error("Forecast error:", err);
+    res.status(500).json({ error: "Erro ao calcular previsão" });
+  }
+}
+
 module.exports = {
   getStats,
   recoveryStats,
-  alerts
+  alerts,
+  forecast
 };

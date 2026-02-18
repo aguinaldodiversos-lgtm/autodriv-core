@@ -34,6 +34,8 @@ const dashboardRoutes = require("./modules/dashboard/dashboard.routes");
 // Tasks
 const tasksRoutes = require("./modules/tasks/tasks.routes");
 
+const pipelineRoutes = require("./modules/pipeline/pipeline.routes");
+
 /* =========================
    REGISTRO DAS ROTAS
 ========================= */
@@ -45,6 +47,7 @@ app.use("/api/ai-seller", aiSellerRoutes);
 app.use("/api/ai-settings", aiSettingsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/tasks", tasksRoutes);
+app.use("/api/pipeline", pipelineRoutes);
 
 /* =========================
    HEALTH CHECK

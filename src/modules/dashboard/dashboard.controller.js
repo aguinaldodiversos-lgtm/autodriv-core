@@ -1,7 +1,7 @@
 const pool = require("../../config/db");
 
 /* =========================
-   MÉTRICAS GERAIS DO DASHBOARD
+   MÉTRICAS GERAIS
 ========================= */
 async function getStats(req, res) {
   try {
@@ -27,7 +27,7 @@ async function getStats(req, res) {
 }
 
 /* =========================
-   SCORE DE RECUPERAÇÃO DE LEADS
+   SCORE DE RECUPERAÇÃO
 ========================= */
 async function recoveryStats(req, res) {
   try {
@@ -60,7 +60,73 @@ async function recoveryStats(req, res) {
   }
 }
 
+/* =========================
+   ALERTAS INTELIGENTES
+========================= */
+async function alerts(req, res) {
+  try {
+    const dealershipId = req.user.dealership_id;
+
+    const result = await pool.query(
+      `
+      SELECT
+        l.id AS lead_id,
+        l.client_name,
+        l.score,
+        s.stage,
+        s.updated_at
+      FROM leads l
+      JOIN lead_ai_state s
+        ON s.lead_id = l.id
+      WHERE l.dealership_id = $1
+      `,
+      [dealershipId]
+    );
+
+    const alerts = [];
+    const now = new Date();
+
+    for (const lead of result.rows) {
+      const updated = new Date(lead.updated_at);
+      const diffHours = (now - updated) / (1000 * 60 * 60);
+
+      // Lead quente
+      if (lead.score >= 70) {
+        alerts.push({
+          type: "hot_lead",
+          lead_id: lead.lead_id,
+          message: "Lead quente aguardando contato"
+        });
+      }
+
+      // Lead parado em qualificação
+      if (lead.stage === "qualifying" && diffHours > 24) {
+        alerts.push({
+          type: "stalled_lead",
+          lead_id: lead.lead_id,
+          message: "Lead parado há mais de 24h"
+        });
+      }
+
+      // IA não conseguiu avançar
+      if (lead.stage === "responded" && diffHours > 48) {
+        alerts.push({
+          type: "ai_stuck",
+          lead_id: lead.lead_id,
+          message: "IA não conseguiu converter. Assuma manualmente"
+        });
+      }
+    }
+
+    res.json(alerts);
+  } catch (err) {
+    console.error("Alerts error:", err);
+    res.status(500).json({ error: "Erro ao gerar alertas" });
+  }
+}
+
 module.exports = {
   getStats,
-  recoveryStats
+  recoveryStats,
+  alerts
 };

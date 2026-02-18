@@ -5,6 +5,8 @@ const {
 } = require("@whiskeysockets/baileys");
 const P = require("pino");
 
+const { handleIncomingMessage } = require("./whatsapp.handler");
+
 let sock = null;
 
 async function startWhatsApp() {
@@ -21,6 +23,33 @@ async function startWhatsApp() {
     logger: P({ level: "silent" })
   });
 
+  /* =========================
+     RECEBER MENSAGENS
+  ========================== */
+  sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    if (type !== "notify") return;
+
+    const msg = messages[0];
+    if (!msg.message) return;
+
+    const from = msg.key.remoteJid;
+
+    const text =
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text;
+
+    if (!text) return;
+
+    try {
+      await handleIncomingMessage(sock, from, text);
+    } catch (err) {
+      console.error("Erro ao processar mensagem:", err);
+    }
+  });
+
+  /* =========================
+     CONEXÃO
+  ========================== */
   sock.ev.on("connection.update", (update) => {
     const { connection, lastDisconnect, qr } = update;
 

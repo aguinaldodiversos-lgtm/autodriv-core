@@ -1,10 +1,14 @@
 module.exports = {
   trial: {
     name: "Trial",
+    duration_days: 15,
     limits: {
       vehicles: "unlimited",
       leads: "unlimited",
-      users: "unlimited"
+      users: "unlimited",
+      whatsapp: true,
+      ia: true,
+      ia_limit: 200 // limite de mensagens IA no trial
     }
   },
 
@@ -13,7 +17,9 @@ module.exports = {
     limits: {
       vehicles: 10,
       leads: 200,
-      users: 1
+      users: 1,
+      whatsapp: true,
+      ia: false
     }
   },
 
@@ -22,7 +28,9 @@ module.exports = {
     limits: {
       vehicles: 30,
       leads: 1000,
-      users: 3
+      users: 3,
+      whatsapp: true,
+      ia: false
     }
   },
 
@@ -31,7 +39,10 @@ module.exports = {
     limits: {
       vehicles: "unlimited",
       leads: "unlimited",
-      users: "unlimited"
+      users: "unlimited",
+      whatsapp: true,
+      ia: true,
+      ia_limit: "unlimited"
     }
   }
 };

@@ -1,69 +1,118 @@
-await pool.query(
-  `UPDATE lead_ai_state
-   SET followup_step = 0,
-       updated_at = NOW()
-   WHERE lead_id = $1`,
-  [leadId]
-);
-
 const pool = require("../../config/db");
 const engine = require("./conversation.engine");
-const convoRepo = require("../lead_conversations/leadConversations.repository");
-const stateRepo = require("../lead_ai_state/leadAiState.repository");
-
-// detectors
-const detectPaymentType = require("./detectors/payment.detector");
-const detectTradeIn = require("./detectors/tradeIn.detector");
-const detectName = require("./detectors/name.detector");
-const detectUsage = require("./detectors/usage.detector");
-const detectBudget = require("./detectors/budget.detector");
-const detectTimeline = require("./detectors/timeline.detector");
-
-// services
-const calculateLeadScore = require("./services/leadScoring.service");
-const { createHotLeadTask } = require("./services/taskAutomation.service");
 
 /* =========================
-   STAGE DETECTION
+   BUSCAR OU CRIAR ESTADO
 ========================= */
+async function getOrCreateState(lead) {
+  let result = await pool.query(
+    `SELECT * FROM lead_ai_state WHERE lead_id = $1`,
+    [lead.id]
+  );
 
-function detectStage(message, currentState) {
-  const msg = message.toLowerCase();
+  let state = result.rows[0];
 
-  if (
-    msg.includes("vou") ||
-    msg.includes("confirm") ||
-    msg.includes("combinado") ||
-    msg.includes("estarei")
-  ) {
-    return "visit_scheduled";
+  if (!state) {
+    const insert = await pool.query(
+      `INSERT INTO lead_ai_state
+       (dealership_id, lead_id, stage)
+       VALUES ($1,$2,'new')
+       RETURNING *`,
+      [lead.dealership_id, lead.id]
+    );
+
+    state = insert.rows[0];
   }
 
-  if (
-    msg.includes("posso ir") ||
-    msg.includes("amanhã") ||
-    msg.includes("hoje") ||
-    msg.includes("ver o carro") ||
-    msg.includes("passar aí")
-  ) {
-    return "ready_for_visit";
-  }
-
-  if (
-    currentState.payment_type &&
-    currentState.has_trade_in !== null
-  ) {
-    return "ready_for_visit";
-  }
-
-  return "qualifying";
+  return state;
 }
 
 /* =========================
-   SERVICE PRINCIPAL
+   ATUALIZA ESTÁGIO
 ========================= */
+async function updateStage(leadId, stage) {
+  await pool.query(
+    `UPDATE lead_ai_state
+     SET stage = $1,
+         updated_at = NOW()
+     WHERE lead_id = $2`,
+    [stage, leadId]
+  );
+}
 
+/* =========================
+   SALVAR MENSAGEM
+========================= */
+async function saveMessage(dealershipId, leadId, role, message) {
+  await pool.query(
+    `INSERT INTO lead_conversations
+     (dealership_id, lead_id, role, message)
+     VALUES ($1,$2,$3,$4)`,
+    [dealershipId, leadId, role, message]
+  );
+}
+
+/* =========================
+   BUSCAR HISTÓRICO
+========================= */
+async function getConversationHistory(leadId) {
+  const result = await pool.query(
+    `SELECT role, message
+     FROM lead_conversations
+     WHERE lead_id = $1
+     ORDER BY id DESC
+     LIMIT 8`,
+    [leadId]
+  );
+
+  return result.rows
+    .reverse()
+    .map(m => ({
+      role: m.role === "client" ? "user" : "assistant",
+      content: m.message
+    }));
+}
+
+/* =========================
+   DETECTAR ESTÁGIO PELO TEXTO
+========================= */
+function detectStage(message, state) {
+  const text = message.toLowerCase();
+
+  if (state.stage === "new") {
+    return "responded";
+  }
+
+  // intenção financeira
+  if (
+    text.includes("financ") ||
+    text.includes("entrada") ||
+    text.includes("parcela") ||
+    text.includes("troca")
+  ) {
+    return "qualifying";
+  }
+
+  // intenção de visita
+  if (
+    text.includes("posso ir") ||
+    text.includes("vou passar") ||
+    text.includes("quando posso") ||
+    text.includes("horário")
+  ) {
+    return "ready_for_visit";
+  }
+
+  return state.stage;
+}
+
+/* =========================
+   FUNÇÃO PRINCIPAL
+========================= */
 async function handleMessage(leadId, message) {
+  /* =========================
+     BUSCA LEAD
+  ========================== */
   const leadResult = await pool.query(
     `SELECT * FROM leads WHERE id = $1`,
     [leadId]
@@ -72,101 +121,77 @@ async function handleMessage(leadId, message) {
   const lead = leadResult.rows[0];
   if (!lead) throw new Error("Lead não encontrado");
 
-  await convoRepo.addMessage({
-    dealership_id: lead.dealership_id,
-    lead_id: leadId,
-    role: "client",
-    message
-  });
+  /* =========================
+     BUSCA VEÍCULO
+  ========================== */
+  let vehicle = null;
 
-  let state = await stateRepo.getState(leadId);
+  if (lead.vehicle_id) {
+    const vehicleResult = await pool.query(
+      `SELECT * FROM vehicles WHERE id = $1`,
+      [lead.vehicle_id]
+    );
 
-  if (!state) {
-    state = await stateRepo.createState({
-      dealership_id: lead.dealership_id,
-      lead_id: leadId,
-      stage: "new"
-    });
+    vehicle = vehicleResult.rows[0];
   }
 
-  // detectores
-  const paymentType = detectPaymentType(message);
-  const tradeIn = detectTradeIn(message);
-  const clientName = detectName(message);
-  const usageProfile = detectUsage(message);
-  const budget = detectBudget(message);
-  const timeline = detectTimeline(message);
+  /* =========================
+     SALVA MENSAGEM CLIENTE
+  ========================== */
+  await saveMessage(lead.dealership_id, lead.id, "client", message);
 
-  let updatedPaymentType = state.payment_type;
-  let updatedTradeIn = state.has_trade_in;
+  /* =========================
+     ESTADO DA IA
+  ========================== */
+  let state = await getOrCreateState(lead);
 
-  if (paymentType) updatedPaymentType = paymentType;
-  if (tradeIn !== null) updatedTradeIn = tradeIn;
-
-  await pool.query(
-    `UPDATE lead_ai_state
-     SET payment_type = COALESCE($2, payment_type),
-         has_trade_in = COALESCE($3, has_trade_in),
-         client_name = COALESCE($4, client_name),
-         usage_profile = COALESCE($5, usage_profile),
-         budget_range = COALESCE($6, budget_range),
-         purchase_timeline = COALESCE($7, purchase_timeline),
-         updated_at = NOW()
-     WHERE lead_id = $1`,
-    [
-      leadId,
-      updatedPaymentType,
-      updatedTradeIn,
-      clientName,
-      usageProfile,
-      budget,
-      timeline
-    ]
-  );
-
-  const newStage = detectStage(message, {
-    payment_type: updatedPaymentType,
-    has_trade_in: updatedTradeIn
-  });
-
-  await stateRepo.updateStage(leadId, newStage);
-
-  const updatedStateResult = await pool.query(
-    `SELECT * FROM lead_ai_state WHERE lead_id = $1`,
-    [leadId]
-  );
-
-  const updatedState = updatedStateResult.rows[0];
-
-  const leadScore = calculateLeadScore(updatedState);
-
-  await pool.query(
-    `UPDATE lead_ai_state
-     SET lead_score = $2,
-         updated_at = NOW()
-     WHERE lead_id = $1`,
-    [leadId, leadScore]
-  );
-
-  if (leadScore === "hot") {
-    await createHotLeadTask(leadId, lead.dealership_id);
+  /* =========================
+     ATUALIZA ESTÁGIO
+  ========================== */
+  const newStage = detectStage(message, state);
+  if (newStage !== state.stage) {
+    await updateStage(lead.id, newStage);
+    state.stage = newStage;
   }
 
-  const messagesRaw = await convoRepo.getRecentMessages(leadId, 6);
+  /* =========================
+     HISTÓRICO
+  ========================== */
+  const messages = await getConversationHistory(lead.id);
 
-  const messages = messagesRaw.map(m => ({
-    role: m.role === "client" ? "user" : "assistant",
-    content: m.message
-  }));
+  /* =========================
+     CONTEXTO DO VEÍCULO
+  ========================== */
+  const vehicleContext = vehicle
+    ? {
+        brand: vehicle.brand,
+        model: vehicle.model,
+        year: vehicle.year,
+        price: vehicle.price,
+        mileage: vehicle.mileage,
+        fuel: vehicle.fuel,
+        transmission: vehicle.transmission,
+        color: vehicle.color,
+        description: vehicle.description
+      }
+    : {};
 
-  const reply = await engine.generateReply({}, messages);
+  /* =========================
+     GERA RESPOSTA DA IA
+  ========================== */
+  const reply = await engine.generateReply(
+    {
+      lead,
+      state,
+      vehicle: vehicleContext
+    },
+    messages
+  );
 
-  await convoRepo.addMessage({
-    dealership_id: lead.dealership_id,
-    lead_id: leadId,
-    role: "ai",
-    message: reply
-  });
+  /* =========================
+     SALVA RESPOSTA IA
+  ========================== */
+  await saveMessage(lead.dealership_id, lead.id, "ai", reply);
 
   return { reply };
 }

@@ -1,4 +1,5 @@
 const service = require("./leads.service");
+const scoreService = require("./leadScore.service");
 
 /* =========================
    CRIAR LEAD
@@ -67,10 +68,23 @@ async function reactivate(req, res) {
   }
 }
 
+/* =========================
+   CONSULTAR SCORE DO LEAD
+========================= */
+async function getScore(req, res) {
+  try {
+    const result = await scoreService.getLeadScore(req.params.id);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
+
 module.exports = {
   create,
   list,
   update,
   remove,
-  reactivate
+  reactivate,
+  getScore
 };

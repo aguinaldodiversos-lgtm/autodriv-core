@@ -1,3 +1,11 @@
+await pool.query(
+  `UPDATE lead_ai_state
+   SET followup_step = 0,
+       updated_at = NOW()
+   WHERE lead_id = $1`,
+  [leadId]
+);
+
 const pool = require("../../config/db");
 const engine = require("./conversation.engine");
 const convoRepo = require("../lead_conversations/leadConversations.repository");

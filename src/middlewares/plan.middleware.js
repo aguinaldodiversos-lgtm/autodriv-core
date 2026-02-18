@@ -4,10 +4,6 @@ const PLANS = require("../config/plans");
 module.exports = function checkPlanLimit(resource) {
   return async (req, res, next) => {
     try {
-      // LOGS TEMPORÁRIOS (diagnóstico)
-      console.log("USER:", req.user);
-      console.log("DEALERSHIP ID:", req.user?.dealership_id);
-
       const dealershipId = req.user?.dealership_id;
 
       if (!dealershipId) {
@@ -16,6 +12,9 @@ module.exports = function checkPlanLimit(resource) {
         });
       }
 
+      /* =====================================================
+         BUSCA ASSINATURA ATIVA
+      ===================================================== */
       const subResult = await pool.query(
         `SELECT * FROM subscriptions
          WHERE dealership_id = $1
@@ -26,7 +25,9 @@ module.exports = function checkPlanLimit(resource) {
       );
 
       if (subResult.rows.length === 0) {
-        return res.status(403).json({ error: "Assinatura não encontrada" });
+        return res.status(403).json({
+          error: "Assinatura não encontrada ou expirada"
+        });
       }
 
       const sub = subResult.rows[0];
@@ -38,6 +39,32 @@ module.exports = function checkPlanLimit(resource) {
         });
       }
 
+      /* =====================================================
+         SE NÃO EXISTE LIMITE CONFIGURADO PARA O RECURSO
+      ===================================================== */
+      if (!plan.limits || !(resource in plan.limits)) {
+        return next();
+      }
+
+      const limit = plan.limits[resource];
+
+      /* =====================================================
+         RECURSO BOOLEANO (ex: whatsapp, ia, automations)
+      ===================================================== */
+      if (limit === false) {
+        return res.status(403).json({
+          error: "feature_not_available",
+          message: `Recurso disponível apenas em planos superiores.`
+        });
+      }
+
+      if (limit === true || limit === "enabled") {
+        return next();
+      }
+
+      /* =====================================================
+         RECURSO NUMÉRICO (ex: vehicles, leads)
+      ===================================================== */
       let countQuery = "";
 
       if (resource === "vehicles") {
@@ -47,12 +74,19 @@ module.exports = function checkPlanLimit(resource) {
         `;
       }
 
-      if (!countQuery) return next();
+      if (resource === "leads") {
+        countQuery = `
+          SELECT COUNT(*) FROM leads
+          WHERE dealership_id = $1
+        `;
+      }
+
+      if (!countQuery) {
+        return next();
+      }
 
       const countResult = await pool.query(countQuery, [dealershipId]);
       const total = parseInt(countResult.rows[0].count);
-
-      const limit = plan.limits[resource];
 
       if (limit !== "unlimited" && total >= limit) {
         return res.status(403).json({
@@ -62,6 +96,7 @@ module.exports = function checkPlanLimit(resource) {
       }
 
       next();
+
     } catch (error) {
       console.error("PLAN MIDDLEWARE ERROR:", error);
       return res.status(500).json({

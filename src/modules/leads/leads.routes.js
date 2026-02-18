@@ -9,5 +9,6 @@ router.post("/:id/reactivate", auth, controller.reactivate);
 router.post("/", auth, controller.create);
 router.put("/:id", auth, controller.update);
 router.delete("/:id", auth, controller.remove);
+router.get("/:id/score", auth, controller.getScore);
 
 module.exports = router;

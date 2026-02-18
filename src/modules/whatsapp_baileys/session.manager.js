@@ -9,9 +9,9 @@ const path = require("path");
 
 const sessions = new Map();
 
-/* =========================================
+/* =====================================================
    INICIAR SESSÃO POR LOJA
-========================================= */
+===================================================== */
 async function startSession(dealershipId) {
   if (sessions.has(dealershipId)) {
     return sessions.get(dealershipId);
@@ -49,6 +49,8 @@ async function startSession(dealershipId) {
 
       if (shouldReconnect) {
         startSession(dealershipId);
+      } else {
+        sessions.delete(dealershipId);
       }
     }
   });
@@ -60,14 +62,22 @@ async function startSession(dealershipId) {
   return sock;
 }
 
-/* =========================================
+/* =====================================================
    OBTER SESSÃO
-========================================= */
+===================================================== */
 function getSession(dealershipId) {
   return sessions.get(dealershipId);
 }
 
+/* =====================================================
+   STATUS
+===================================================== */
+function isConnected(dealershipId) {
+  return sessions.has(dealershipId);
+}
+
 module.exports = {
   startSession,
-  getSession
+  getSession,
+  isConnected
 };

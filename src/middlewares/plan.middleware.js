@@ -8,53 +8,77 @@ module.exports = function checkPlanLimit(resource) {
 
       if (!dealershipId) {
         return res.status(401).json({
-          error: "Usuário sem dealership_id"
+          error: "Usuário inválido"
         });
       }
 
       /* =====================================================
-         BUSCA ASSINATURA ATIVA
+         BUSCA ASSINATURA
       ===================================================== */
       const subResult = await pool.query(
         `SELECT * FROM subscriptions
          WHERE dealership_id = $1
-         AND status = 'active'
-         AND current_period_end > NOW()
          LIMIT 1`,
         [dealershipId]
       );
 
-      if (subResult.rows.length === 0) {
+      if (!subResult.rows.length) {
         return res.status(403).json({
-          error: "Assinatura não encontrada ou expirada"
+          error: "Assinatura não encontrada"
         });
       }
 
       const sub = subResult.rows[0];
-      const plan = PLANS[sub.plan];
+      const planConfig = PLANS[sub.plan];
 
-      if (!plan) {
+      if (!planConfig) {
         return res.status(500).json({
           error: "Plano inválido configurado"
         });
       }
 
       /* =====================================================
-         SE NÃO EXISTE LIMITE CONFIGURADO PARA O RECURSO
+         BLOQUEIO TRIAL EXPIRADO
       ===================================================== */
-      if (!plan.limits || !(resource in plan.limits)) {
+      if (sub.plan === "trial") {
+        const now = new Date();
+        const endDate = new Date(sub.current_period_end);
+
+        if (now > endDate) {
+          return res.status(403).json({
+            error: "trial_expired",
+            message:
+              "Seu período de teste expirou. Escolha um plano para continuar."
+          });
+        }
+      }
+
+      /* =====================================================
+         BLOQUEIO ASSINATURA INATIVA
+      ===================================================== */
+      if (sub.plan !== "trial" && sub.status !== "active") {
+        return res.status(403).json({
+          error: "subscription_inactive",
+          message: "Sua assinatura está inativa."
+        });
+      }
+
+      /* =====================================================
+         SE NÃO EXISTE RECURSO NO PLANO
+      ===================================================== */
+      if (!planConfig.limits || !(resource in planConfig.limits)) {
         return next();
       }
 
-      const limit = plan.limits[resource];
+      const limit = planConfig.limits[resource];
 
       /* =====================================================
-         RECURSO BOOLEANO (ex: whatsapp, ia, automations)
+         RECURSO BOOLEANO
       ===================================================== */
       if (limit === false) {
         return res.status(403).json({
           error: "feature_not_available",
-          message: `Recurso disponível apenas em planos superiores.`
+          message: "Recurso disponível apenas em planos superiores."
         });
       }
 
@@ -63,7 +87,7 @@ module.exports = function checkPlanLimit(resource) {
       }
 
       /* =====================================================
-         RECURSO NUMÉRICO (ex: vehicles, leads)
+         RECURSO NUMÉRICO
       ===================================================== */
       let countQuery = "";
 
@@ -81,9 +105,14 @@ module.exports = function checkPlanLimit(resource) {
         `;
       }
 
-      if (!countQuery) {
-        return next();
+      if (resource === "users") {
+        countQuery = `
+          SELECT COUNT(*) FROM users
+          WHERE dealership_id = $1
+        `;
       }
+
+      if (!countQuery) return next();
 
       const countResult = await pool.query(countQuery, [dealershipId]);
       const total = parseInt(countResult.rows[0].count);

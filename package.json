@@ -1,5 +1,6 @@
 {
   "name": "autodriv-core",
+  "qrcode": "^1.5.4"
   "version": "1.0.0",
   "description": "AutoDriv Core - CRM com vendedor IA para lojas de veículos",
   "main": "src/server.js",

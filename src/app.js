@@ -25,6 +25,7 @@ const pipelineRoutes = require("./modules/pipeline/pipeline.routes");
 const leadsImportRoutes = require("./modules/leads_import/leadsImport.routes");
 const whatsappRoutes = require("./modules/whatsapp/whatsapp.routes");
 const inboxRoutes = require("./modules/inbox/inbox.routes");
+const whatsappRoutes = require("./modules/whatsapp/whatsapp.routes");
 
 /* =========================
    ENDPOINT DE SAÚDE
@@ -49,6 +50,7 @@ app.use("/api/pipeline", pipelineRoutes);
 app.use("/api/leads-import", leadsImportRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/inbox", inboxRoutes);
+app.use("/api/whatsapp", whatsappRoutes);
 
 /* =========================
    HANDLER DE ERROS

@@ -1,9 +1,14 @@
 const service = require("./leadsImport.service");
 
+/* =========================
+   IMPORTAR LEADS VIA CSV
+========================= */
 async function importCSV(req, res) {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "Arquivo CSV não enviado" });
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({
+        error: "Arquivo CSV não enviado"
+      });
     }
 
     const result = await service.importLeads(
@@ -11,10 +16,16 @@ async function importCSV(req, res) {
       req.user
     );
 
-    res.json(result);
+    res.json({
+      success: true,
+      total_imported: result.total,
+      leads: result.leads
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao importar leads" });
+    console.error("Leads import error:", err);
+    res.status(500).json({
+      error: "Erro ao importar leads"
+    });
   }
 }
 

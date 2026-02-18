@@ -1,6 +1,7 @@
 require("dotenv").config();
 
-const app = require("./src/app");
+const app = require("./app");
+const { startWhatsApp } = require("./modules/whatsapp_baileys/whatsapp.baileys");
 
 const PORT = process.env.PORT || 10000;
 
@@ -11,6 +12,9 @@ app.listen(PORT, () => {
   console.log("=================================");
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log("=================================");
+
+  // inicia o WhatsApp
+  startWhatsApp();
 });
 
 /* =========================

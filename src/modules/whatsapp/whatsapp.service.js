@@ -33,11 +33,15 @@ async function sendMessage(dealershipId, phone, text) {
 ===================================================== */
 async function handleIncomingMessage({ dealershipId, phone, text }) {
   try {
-    if (!phone || !text) return;
+    if (!dealershipId || !phone || !text) return;
 
-    /* =============================================
+    console.log(
+      `📩 Processando mensagem - Loja ${dealershipId} - ${phone}`
+    );
+
+    /* =====================================================
        BUSCA LEAD
-    ============================================= */
+    ===================================================== */
     let leadResult = await pool.query(
       `SELECT * FROM leads
        WHERE dealership_id = $1
@@ -47,9 +51,9 @@ async function handleIncomingMessage({ dealershipId, phone, text }) {
 
     let lead = leadResult.rows[0];
 
-    /* =============================================
-       SE NÃO EXISTE, CRIA
-    ============================================= */
+    /* =====================================================
+       SE NÃO EXISTE LEAD, CRIA
+    ===================================================== */
     if (!lead) {
       const insert = await pool.query(
         `INSERT INTO leads
@@ -61,22 +65,23 @@ async function handleIncomingMessage({ dealershipId, phone, text }) {
 
       lead = insert.rows[0];
 
-      // Agenda follow-ups completos (Dia 0)
-      await followupService.scheduleLeadFollowups(lead, "full");
-
       console.log(
-        `📌 Novo lead criado via WhatsApp - Loja ${dealershipId}`
+        `🆕 Novo lead criado via WhatsApp - ID ${lead.id}`
       );
+
+      // Agenda script automático completo (Dia 0)
+      await followupService.scheduleLeadFollowups(lead, "full");
     }
 
-    /* =============================================
-       CLIENTE RESPONDEU
+    /* =====================================================
+       SE CLIENTE RESPONDEU E ESTAVA EM SCRIPT
        ATIVA IA E CANCELA FOLLOWUPS
-    ============================================= */
+    ===================================================== */
     if (lead.ai_mode === "scheduled") {
       await pool.query(
         `UPDATE leads
-         SET ai_mode = 'active'
+         SET ai_mode = 'active',
+             updated_at = NOW()
          WHERE id = $1`,
         [lead.id]
       );
@@ -88,27 +93,40 @@ async function handleIncomingMessage({ dealershipId, phone, text }) {
       );
     }
 
-    /* =============================================
+    /* =====================================================
        CHAMA IA
-    ============================================= */
+    ===================================================== */
     const result = await aiSeller.handleMessage(
       lead.id,
       text
     );
 
-    /* =============================================
-       ENVIA RESPOSTA
-    ============================================= */
+    if (!result?.reply) {
+      console.log("⚠️ IA não retornou resposta.");
+      return;
+    }
+
+    /* =====================================================
+       ENVIA RESPOSTA VIA BAILEYS
+    ===================================================== */
     await sendMessage(
       dealershipId,
       phone,
       result.reply
     );
 
+    console.log(
+      `📤 Resposta enviada para ${phone}`
+    );
+
   } catch (err) {
-    console.error("Erro no handleIncomingMessage:", err);
+    console.error(
+      "❌ Erro no handleIncomingMessage:",
+      err
+    );
   }
 }
+
 
 module.exports = {
   handleIncomingMessage,

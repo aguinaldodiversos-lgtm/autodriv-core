@@ -16,7 +16,7 @@ app.use(express.json());
 ========================= */
 
 // Auth
-const authRoutes = require("./routes/auth");
+const authRoutes = require("./routes/auth/index");
 
 // Vehicles
 const vehiclesRoutes = require("./modules/vehicles/vehicles.routes");
@@ -33,7 +33,7 @@ const aiSettingsRoutes = require("./modules/ai_settings/aiSettings.routes");
 // Dashboard
 const dashboardRoutes = require("./modules/dashboard/dashboard.routes");
 
-// Tasks (NOVO)
+// Tasks
 const tasksRoutes = require("./modules/tasks/tasks.routes");
 
 /* =========================
@@ -48,9 +48,6 @@ app.use("/api/ai-settings", aiSettingsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/tasks", tasksRoutes);
 
-/* =========================
-   ROTA DE TESTE
-========================= */
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
@@ -58,12 +55,8 @@ app.get("/", (req, res) => {
   });
 });
 
-/* =========================
-   TRATAMENTO DE ERROS
-========================= */
 app.use((err, req, res, next) => {
   console.error("Erro global:", err);
-
   res.status(500).json({
     error: "Erro interno do servidor"
   });

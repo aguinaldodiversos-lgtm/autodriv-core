@@ -4,24 +4,14 @@ const auth = require("../../middlewares/auth.middleware");
 
 const router = express.Router();
 
-// rota principal do dashboard
-if (controller.getDashboard) {
-  router.get("/", auth, controller.getDashboard);
-}
+/* =========================
+   DASHBOARD PRINCIPAL
+========================= */
+router.get("/", auth, controller.getStats);
 
-// métricas
-if (controller.getMetrics) {
-  router.get("/metrics", auth, controller.getMetrics);
-}
-
-// leads recentes
-if (controller.getRecentLeads) {
-  router.get("/recent-leads", auth, controller.getRecentLeads);
-}
-
-// veículos recentes
-if (controller.getRecentVehicles) {
-  router.get("/recent-vehicles", auth, controller.getRecentVehicles);
-}
+/* =========================
+   SCORE DE RECUPERAÇÃO
+========================= */
+router.get("/recovery", auth, controller.recoveryStats);
 
 module.exports = router;

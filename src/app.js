@@ -31,6 +31,7 @@ const forecastRoutes = require("./modules/analytics/forecast.routes");
 const dashboardIntelligenceRoutes = require("./modules/dashboard_intelligence/dashboard.routes");
 const notificationRoutes = require("./modules/notifications/notification.routes");
 const goalRoutes = require("./modules/goals/goal.routes");
+const funnelRoutes = require("./modules/funnel_analysis/funnel.routes");
 
 /* =========================
    ENDPOINT DE SAÚDE
@@ -61,7 +62,7 @@ app.use("/api/forecast", forecastRoutes);
 app.use("/api/dashboard-intelligence", dashboardIntelligenceRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/goals", goalRoutes);
-
+app.use("/api/funnel-analysis", funnelRoutes);
 /* =========================
    HANDLER DE ERROS
 ========================= */

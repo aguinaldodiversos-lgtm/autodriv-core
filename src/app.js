@@ -32,6 +32,7 @@ const dashboardIntelligenceRoutes = require("./modules/dashboard_intelligence/da
 const notificationRoutes = require("./modules/notifications/notification.routes");
 const goalRoutes = require("./modules/goals/goal.routes");
 const funnelRoutes = require("./modules/funnel_analysis/funnel.routes");
+const rankingRoutes = require("./modules/seller_ranking/ranking.routes");
 
 /* =========================
    ENDPOINT DE SAÚDE
@@ -63,6 +64,8 @@ app.use("/api/dashboard-intelligence", dashboardIntelligenceRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/goals", goalRoutes);
 app.use("/api/funnel-analysis", funnelRoutes);
+app.use("/api/seller-ranking", rankingRoutes);
+
 /* =========================
    HANDLER DE ERROS
 ========================= */

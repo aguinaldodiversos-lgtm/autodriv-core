@@ -3,62 +3,129 @@
 <head>
 <meta charset="UTF-8">
 <style>
-body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.5; }
-h1 { text-align: center; font-size: 18px; }
-.section { margin-top: 15px; }
-.bold { font-weight: bold; }
-.signature { margin-top: 40px; }
-hr { margin: 20px 0; }
+body {
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 40px;
+}
+h1 {
+  text-align: center;
+  font-size: 18px;
+  margin-bottom: 30px;
+}
+.section {
+  margin-top: 18px;
+}
+.bold {
+  font-weight: bold;
+}
+hr {
+  margin: 20px 0;
+}
+.signature {
+  margin-top: 60px;
+}
+.footer {
+  margin-top: 40px;
+  font-size: 10px;
+  text-align: center;
+  color: #555;
+}
 </style>
 </head>
 <body>
 
-<h1>CONTRATO DE COMPRA E VENDA DE VEÍCULO</h1>
+<h1>CONTRATO PARTICULAR DE COMPRA E VENDA DE VEÍCULO</h1>
 
 <div class="section">
-<span class="bold">VENDEDORA:</span> {{DEALERSHIP_NAME}} - CNPJ {{DEALERSHIP_CNPJ}}
+<span class="bold">VENDEDORA:</span><br>
+{{DEALERSHIP_NAME}}<br>
+CNPJ: {{DEALERSHIP_CNPJ}}<br>
+Endereço: {{DEALERSHIP_ADDRESS}}
 </div>
 
 <div class="section">
-<span class="bold">COMPRADOR:</span> {{CLIENT_NAME}} - CPF {{CLIENT_DOCUMENT}}
+<span class="bold">COMPRADOR:</span><br>
+{{CLIENT_NAME}}<br>
+CPF: {{CLIENT_DOCUMENT}}<br>
+RG: {{CLIENT_RG}}<br>
+Endereço: {{CLIENT_ADDRESS}}
 </div>
 
 <hr>
 
 <div class="section">
-<span class="bold">VEÍCULO:</span><br>
+<span class="bold">CLÁUSULA 1 – DO OBJETO</span><br><br>
 Marca: {{VEHICLE_BRAND}}<br>
 Modelo: {{VEHICLE_MODEL}}<br>
 Ano: {{VEHICLE_YEAR}}<br>
 Placa: {{VEHICLE_PLATE}}<br>
 Chassi: {{VEHICLE_CHASSIS}}<br>
-Renavam: {{VEHICLE_RENAVAM}}
+Renavam: {{VEHICLE_RENAVAM}}<br>
+Cor: {{VEHICLE_COLOR}}<br>
+KM declarada: {{VEHICLE_KM}}<br><br>
+
+O COMPRADOR declara ter vistoriado o veículo, realizado testes e estar ciente de seu estado geral, reconhecendo tratar-se de veículo usado com desgaste natural compatível.
 </div>
 
 <hr>
 
 <div class="section">
-<span class="bold">VALOR TOTAL:</span> R$ {{SALE_PRICE}}
-</div>
+<span class="bold">CLÁUSULA 2 – DO PREÇO E PAGAMENTO</span><br><br>
+Valor total ajustado: R$ {{SALE_PRICE}}<br><br>
 
-<div class="section">
-<span class="bold">FORMA DE PAGAMENTO:</span><br>
 Entrada: R$ {{DOWN_PAYMENT}}<br>
-Financiado: R$ {{FINANCED_AMOUNT}} - {{INSTALLMENTS_NUMBER}} parcelas de R$ {{INSTALLMENT_VALUE}}
+Financiado: R$ {{FINANCED_AMOUNT}}<br>
+Banco: {{BANK_NAME}}<br>
+Parcelas: {{INSTALLMENTS_NUMBER}}x de R$ {{INSTALLMENT_VALUE}}<br><br>
+
+A entrega do veículo ocorrerá após compensação financeira e validação documental.
+</div>
+
+<hr>
+
+<div class="section">
+<span class="bold">CLÁUSULA 3 – DA GARANTIA</span><br>
+Concede-se garantia legal de 90 dias para vícios ocultos preexistentes, limitada a motor e câmbio, nos termos do art. 26, II, do CDC.
+</div>
+
+<hr>
+
+<div class="section">
+<span class="bold">CLÁUSULA 4 – RESPONSABILIDADE</span><br>
+Após a tradição do veículo, todos os riscos, multas, tributos e responsabilidades passam a ser do COMPRADOR.
+</div>
+
+<hr>
+
+<div class="section">
+<span class="bold">OBSERVAÇÕES DA NEGOCIAÇÃO</span><br>
+{{OBSERVATIONS}}
+</div>
+
+<hr>
+
+<div class="section">
+Foro da comarca de {{DEALERSHIP_CITY}}/{{DEALERSHIP_STATE}}.
 </div>
 
 <div class="section">
-Declaro ter vistoriado o veículo e estar ciente de seu estado geral.
+Data: {{CONTRACT_DATE}}
 </div>
 
 <div class="signature">
-_____________________________<br>
+_________________________________<br>
 VENDEDORA
 </div>
 
 <div class="signature">
-_____________________________<br>
+_________________________________<br>
 COMPRADOR
+</div>
+
+<div class="footer">
+Contrato gerado automaticamente pelo sistema AutoDriv Core.
 </div>
 
 </body>

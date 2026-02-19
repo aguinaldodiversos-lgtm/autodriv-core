@@ -28,6 +28,7 @@ const inboxRoutes = require("./modules/inbox/inbox.routes");
 const whatsappRoutes = require("./modules/whatsapp/whatsapp.routes");
 const leadDistributionRoutes = require("./modules/lead_distribution/distribution.routes");
 const forecastRoutes = require("./modules/analytics/forecast.routes");
+const dashboardIntelligenceRoutes = require("./modules/dashboard_intelligence/dashboard.routes");
 
 /* =========================
    ENDPOINT DE SAÚDE
@@ -55,6 +56,7 @@ app.use("/api/inbox", inboxRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/lead-distribution", leadDistributionRoutes);
 app.use("/api/forecast", forecastRoutes);
+app.use("/api/dashboard-intelligence", dashboardIntelligenceRoutes);
 
 /* =========================
    HANDLER DE ERROS

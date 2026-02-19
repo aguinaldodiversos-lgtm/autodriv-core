@@ -35,6 +35,7 @@ const funnelRoutes = require("./modules/funnel_analysis/funnel.routes");
 const rankingRoutes = require("./modules/seller_ranking/ranking.routes");
 const strategyRoutes = require("./modules/ai_strategy/strategy.routes");
 const commissionRoutes = require("./modules/commission/commission.routes");
+const salesRoutes = require("./modules/sales/sales.routes");
 
 /* =========================
    ENDPOINT DE SAÚDE
@@ -69,6 +70,7 @@ app.use("/api/funnel-analysis", funnelRoutes);
 app.use("/api/seller-ranking", rankingRoutes);
 app.use("/api/ai-strategy", strategyRoutes);
 app.use("/api/commission", commissionRoutes);
+app.use("/api/sales", salesRoutes);
 
 /* =========================
    HANDLER DE ERROS

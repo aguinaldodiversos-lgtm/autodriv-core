@@ -4,7 +4,9 @@ const auth = require("../../middlewares/auth.middleware");
 
 const router = express.Router();
 
-router.get("/", auth, controller.list);
 router.post("/", auth, controller.create);
+router.post("/:id/submit", auth, controller.submit);
+router.post("/:id/approve", auth, controller.approve);
+router.post("/:id/reject", auth, controller.reject);
 
 module.exports = router;

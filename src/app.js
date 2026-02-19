@@ -33,7 +33,7 @@ const notificationRoutes = require("./modules/notifications/notification.routes"
 const goalRoutes = require("./modules/goals/goal.routes");
 const funnelRoutes = require("./modules/funnel_analysis/funnel.routes");
 const rankingRoutes = require("./modules/seller_ranking/ranking.routes");
-
+const strategyRoutes = require("./modules/ai_strategy/strategy.routes");
 /* =========================
    ENDPOINT DE SAÚDE
 ========================= */
@@ -65,6 +65,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/goals", goalRoutes);
 app.use("/api/funnel-analysis", funnelRoutes);
 app.use("/api/seller-ranking", rankingRoutes);
+app.use("/api/ai-strategy", strategyRoutes);
 
 /* =========================
    HANDLER DE ERROS

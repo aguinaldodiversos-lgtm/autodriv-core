@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.5; }
+h1 { text-align: center; font-size: 18px; }
+.section { margin-top: 15px; }
+.bold { font-weight: bold; }
+.signature { margin-top: 40px; }
+hr { margin: 20px 0; }
+</style>
+</head>
+<body>
+
+<h1>CONTRATO DE COMPRA E VENDA DE VEÍCULO</h1>
+
+<div class="section">
+<span class="bold">VENDEDORA:</span> {{DEALERSHIP_NAME}} - CNPJ {{DEALERSHIP_CNPJ}}
+</div>
+
+<div class="section">
+<span class="bold">COMPRADOR:</span> {{CLIENT_NAME}} - CPF {{CLIENT_DOCUMENT}}
+</div>
+
+<hr>
+
+<div class="section">
+<span class="bold">VEÍCULO:</span><br>
+Marca: {{VEHICLE_BRAND}}<br>
+Modelo: {{VEHICLE_MODEL}}<br>
+Ano: {{VEHICLE_YEAR}}<br>
+Placa: {{VEHICLE_PLATE}}<br>
+Chassi: {{VEHICLE_CHASSIS}}<br>
+Renavam: {{VEHICLE_RENAVAM}}
+</div>
+
+<hr>
+
+<div class="section">
+<span class="bold">VALOR TOTAL:</span> R$ {{SALE_PRICE}}
+</div>
+
+<div class="section">
+<span class="bold">FORMA DE PAGAMENTO:</span><br>
+Entrada: R$ {{DOWN_PAYMENT}}<br>
+Financiado: R$ {{FINANCED_AMOUNT}} - {{INSTALLMENTS_NUMBER}} parcelas de R$ {{INSTALLMENT_VALUE}}
+</div>
+
+<div class="section">
+Declaro ter vistoriado o veículo e estar ciente de seu estado geral.
+</div>
+
+<div class="signature">
+_____________________________<br>
+VENDEDORA
+</div>
+
+<div class="signature">
+_____________________________<br>
+COMPRADOR
+</div>
+
+</body>
+</html>

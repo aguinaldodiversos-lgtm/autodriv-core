@@ -38,6 +38,7 @@ const commissionRoutes = require("./modules/commission/commission.routes");
 const salesRoutes = require("./modules/sales/sales.routes");
 const contractRoutes = require("./modules/contracts/contracts.routes");
 const approvalPanelRoutes = require("./modules/sales_approval_panel/approvalPanel.routes");
+const approvalDashboardRoutes = require("./modules/approval_dashboard/approvalDashboard.routes");
 
 /* =========================
    ENDPOINT DE SAÚDE
@@ -75,6 +76,7 @@ app.use("/api/commission", commissionRoutes);
 app.use("/api/sales", salesRoutes);
 app.use("/api/contracts", contractRoutes);
 app.use("/api/sales-approval-panel", approvalPanelRoutes);
+app.use("/api/approval-dashboard", approvalDashboardRoutes);
 
 /* =========================
    HANDLER DE ERROS

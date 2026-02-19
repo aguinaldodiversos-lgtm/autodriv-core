@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Contrato de Compra e Venda com Permuta</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 40px;
+  color: #000;
+}
+
+h1 {
+  text-align: center;
+  font-size: 18px;
+  margin-bottom: 30px;
+}
+
+.section {
+  margin-bottom: 18px;
+}
+
+.section-title {
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+hr {
+  margin: 20px 0;
+}
+
+.signature {
+  margin-top: 60px;
+  width: 45%;
+  display: inline-block;
+  text-align: center;
+}
+
+.footer {
+  margin-top: 40px;
+  font-size: 10px;
+  text-align: center;
+  color: #555;
+}
+</style>
+</head>
+
+<body>
+
+<h1>CONTRATO PARTICULAR DE COMPRA E VENDA DE VEÍCULO COM PERMUTA</h1>
+
+<div class="section">
+<div class="section-title">VENDEDORA</div>
+{{DEALERSHIP_NAME}}<br>
+CNPJ: {{DEALERSHIP_CNPJ}}<br>
+Endereço: {{DEALERSHIP_ADDRESS}}<br>
+Representante: {{DEALERSHIP_REPRESENTATIVE}}
+</div>
+
+<div class="section">
+<div class="section-title">COMPRADOR</div>
+Nome: {{CLIENT_NAME}}<br>
+CPF: {{CLIENT_DOCUMENT}}<br>
+RG: {{CLIENT_RG}}<br>
+Endereço: {{CLIENT_ADDRESS}}
+</div>
+
+<hr>
+
+<div class="section">
+<div class="section-title">VEÍCULO VENDIDO</div>
+Marca: {{VEHICLE_BRAND}}<br>
+Modelo: {{VEHICLE_MODEL}}<br>
+Ano/Modelo: {{VEHICLE_YEAR}}<br>
+Placa: {{VEHICLE_PLATE}}<br>
+Chassi: {{VEHICLE_CHASSIS}}<br>
+Renavam: {{VEHICLE_RENAVAM}}<br>
+Cor: {{VEHICLE_COLOR}}<br>
+Quilometragem declarada: {{VEHICLE_KM}}
+</div>
+
+<hr>
+
+<div class="section">
+<div class="section-title">VEÍCULO DADO EM PERMUTA</div>
+Marca: {{TRADE_BRAND}}<br>
+Modelo: {{TRADE_MODEL}}<br>
+Ano: {{TRADE_YEAR}}<br>
+Placa: {{TRADE_PLATE}}<br>
+Chassi: {{TRADE_CHASSIS}}<br>
+Renavam: {{TRADE_RENAVAM}}<br>
+Valor atribuído: R$ {{TRADE_VALUE}}
+</div>
+
+<hr>
+
+<div class="section">
+<div class="section-title">VALOR E CONDIÇÕES DE PAGAMENTO</div>
+Valor total da venda: <strong>R$ {{SALE_PRICE}}</strong><br>
+Valor à vista: R$ {{CASH_AMOUNT}} ({{CASH_PAYMENT_METHOD}})<br>
+Entrada: R$ {{DOWN_PAYMENT}}<br>
+Valor financiado: R$ {{FINANCED_AMOUNT}}<br>
+Banco: {{BANK_NAME}}<br>
+Parcelas: {{INSTALLMENTS_NUMBER}} de R$ {{INSTALLMENT_VALUE}}
+</div>
+
+<hr>
+
+<div class="section">
+<div class="section-title">DECLARAÇÕES</div>
+O COMPRADOR declara ter vistoriado o veículo, realizado teste de funcionamento e estar ciente de seu estado geral, reconhecendo tratar-se de veículo usado, com desgaste natural compatível com sua idade e quilometragem.
+</div>
+
+<div class="section">
+A VENDEDORA concede garantia legal de 90 dias para vícios ocultos preexistentes, limitada a motor e câmbio, nos termos do art. 26 do Código de Defesa do Consumidor.
+</div>
+
+<div class="section">
+Reparos realizados por terceiros sem autorização prévia da VENDEDORA não gerarão direito a reembolso.
+</div>
+
+<div class="section">
+Débitos anteriores à data da venda são de responsabilidade da VENDEDORA. Pagamentos realizados pelo COMPRADOR sem autorização prévia não gerarão reembolso.
+</div>
+
+<hr>
+
+<div class="section">
+<div class="section-title">OBSERVAÇÕES</div>
+{{OBSERVATIONS}}
+</div>
+
+<hr>
+
+<div class="section">
+Local e data: {{CONTRACT_DATE}}
+</div>
+
+<div>
+<div class="signature">
+_________________________________<br>
+VENDEDORA
+</div>
+
+<div class="signature" style="float:right;">
+_________________________________<br>
+COMPRADOR
+</div>
+</div>
+
+<div class="footer">
+Este contrato é firmado em duas vias de igual teor.
+</div>
+
+</body>
+</html>

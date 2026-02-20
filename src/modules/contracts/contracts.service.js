@@ -1,68 +1,36 @@
-// src/modules/contracts/contracts.service.js
-
-const path = require("path");
-const db = require("../../config/db");
-const repository = require("./contracts.repository");
-const { generatePDF } = require("./contract.generator");
-
-async function sendForApproval(contractId) {
-  const contract = await repository.findById(contractId);
-
-  if (!contract) throw new Error("Contrato não encontrado.");
-  if (contract.status !== "draft")
-    throw new Error("Somente contratos em rascunho podem ser enviados.");
-
-  return repository.updateStatus(contractId, "pending_approval", null, null);
-}
-
-async function approveContract(contractId, user) {
-  if (!["manager", "admin"].includes(user.role)) {
-    throw new Error("Sem permissão para aprovar.");
-  }
-
-  const contract = await repository.findById(contractId);
-
-  if (contract.status !== "pending_approval")
-    throw new Error("Contrato não está pendente.");
-
-  return repository.updateStatus(contractId, "approved", user.id);
-}
-
-async function rejectContract(contractId, user, reason) {
-  if (!["manager", "admin"].includes(user.role)) {
-    throw new Error("Sem permissão para rejeitar.");
-  }
-
-  const contract = await repository.findById(contractId);
-
-  if (contract.status !== "pending_approval")
-    throw new Error("Contrato não está pendente.");
-
-  return repository.updateStatus(contractId, "rejected", user.id, reason);
-}
-async function generateContract(saleId) {
+async function generateContract(contractId) {
   const client = await db.connect();
 
   try {
     await client.query("BEGIN");
 
-    const sale = await repository.findSaleById(saleId);
+    // Buscar contrato
+    const contract = await repository.findById(contractId);
+
+    if (!contract) {
+      throw new Error("Contrato não encontrado.");
+    }
+
+    // 🔒 BLOQUEIO PRINCIPAL
+    if (contract.status !== "approved") {
+      throw new Error("Contrato precisa estar aprovado para gerar PDF.");
+    }
+
+    // Buscar dados da venda vinculada
+    const sale = await repository.findSaleById(contract.sale_id);
 
     if (!sale) {
-      throw new Error("Venda não encontrada.");
+      throw new Error("Venda vinculada não encontrada.");
     }
 
-    if (sale.status !== "approved") {
-      throw new Error("Contrato só pode ser gerado para vendas aprovadas.");
-    }
-
-    const version = await repository.getNextVersion(saleId, client);
+    const version = await repository.getNextVersion(contract.sale_id, client);
 
     const templateName = sale.trade_brand
       ? "contract-sale-trade.html"
       : "contract-sale.html";
 
-    const fileName = `contract-${saleId}-v${version}.pdf`;
+    const fileName = `contract-${contract.sale_id}-v${version}.pdf`;
+
     const outputPath = path.join(
       process.cwd(),
       "uploads",
@@ -83,8 +51,8 @@ async function generateContract(saleId) {
       outputPath
     });
 
-    const contract = await repository.createContractRecord({
-      sale_id: saleId,
+    const newContract = await repository.createContractRecord({
+      sale_id: contract.sale_id,
       version,
       file_path: outputPath,
       hash,
@@ -93,7 +61,7 @@ async function generateContract(saleId) {
 
     await client.query("COMMIT");
 
-    return contract;
+    return newContract;
 
   } catch (error) {
     await client.query("ROLLBACK");
@@ -102,7 +70,3 @@ async function generateContract(saleId) {
     client.release();
   }
 }
-
-module.exports = {
-  generateContract
-};

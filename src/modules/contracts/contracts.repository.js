@@ -24,6 +24,30 @@ async function findSaleById(saleId) {
   return rows[0];
 }
 
+async function updateStatus(contractId, status, userId, reason = null) {
+  const query = `
+    UPDATE contracts
+    SET status = $1,
+        approved_by = $2,
+        approved_at = NOW(),
+        rejection_reason = $3
+    WHERE id = $4
+    RETURNING *
+  `;
+
+  const values = [status, userId, reason, contractId];
+
+  const { rows } = await db.query(query, values);
+  return rows[0];
+}
+
+async function findById(contractId) {
+  const { rows } = await db.query(
+    "SELECT * FROM contracts WHERE id = $1",
+    [contractId]
+  );
+  return rows[0];
+}
 async function getNextVersion(saleId, client) {
   const query = `
     SELECT COALESCE(MAX(version), 0) + 1 as next_version

@@ -1,22 +1,144 @@
+// src/modules/contracts/contracts.service.js
+
+const db = require("../../config/db");
+const repository = require("./contracts.repository");
+const { generatePDF } = require("./contract.generator");
+const path = require("path");
+
+/*
+=====================================================
+UPDATE CONTRACT (COM BLOQUEIO APÓS APROVAÇÃO)
+=====================================================
+*/
+
+async function updateContract(contractId, data, user) {
+  const contract = await repository.findById(contractId);
+
+  if (!contract) {
+    throw new Error("Contrato não encontrado.");
+  }
+
+  // 🔒 BLOQUEIO ABSOLUTO APÓS APROVAÇÃO
+  if (contract.status === "approved") {
+    throw new Error(
+      "Contrato aprovado não pode ser editado. Crie uma nova versão."
+    );
+  }
+
+  // 🔒 BLOQUEIO SE ESTIVER EM APROVAÇÃO
+  if (contract.status === "pending_approval") {
+    throw new Error(
+      "Contrato em aprovação não pode ser editado."
+    );
+  }
+
+  // 🔐 Permissão mínima (seller, manager ou admin)
+  if (!["seller", "manager", "admin"].includes(user.role)) {
+    throw new Error("Você não tem permissão para editar contrato.");
+  }
+
+  return repository.update(contractId, data);
+}
+
+/*
+=====================================================
+ENVIO PARA APROVAÇÃO
+=====================================================
+*/
+
+async function sendForApproval(contractId) {
+  const contract = await repository.findById(contractId);
+
+  if (!contract) {
+    throw new Error("Contrato não encontrado.");
+  }
+
+  if (contract.status !== "draft" && contract.status !== "rejected") {
+    throw new Error(
+      "Somente contratos em rascunho ou rejeitados podem ser enviados."
+    );
+  }
+
+  return repository.updateStatus(contractId, "pending_approval", null, null);
+}
+
+/*
+=====================================================
+APROVAR CONTRATO
+=====================================================
+*/
+
+async function approveContract(contractId, user) {
+  if (!["manager", "admin"].includes(user.role)) {
+    throw new Error("Sem permissão para aprovar contrato.");
+  }
+
+  const contract = await repository.findById(contractId);
+
+  if (!contract) {
+    throw new Error("Contrato não encontrado.");
+  }
+
+  if (contract.status !== "pending_approval") {
+    throw new Error("Contrato não está pendente de aprovação.");
+  }
+
+  return repository.updateStatus(contractId, "approved", user.id, null);
+}
+
+/*
+=====================================================
+REJEITAR CONTRATO
+=====================================================
+*/
+
+async function rejectContract(contractId, user, reason) {
+  if (!["manager", "admin"].includes(user.role)) {
+    throw new Error("Sem permissão para rejeitar contrato.");
+  }
+
+  const contract = await repository.findById(contractId);
+
+  if (!contract) {
+    throw new Error("Contrato não encontrado.");
+  }
+
+  if (contract.status !== "pending_approval") {
+    throw new Error("Contrato não está pendente de aprovação.");
+  }
+
+  if (!reason) {
+    throw new Error("Motivo da rejeição é obrigatório.");
+  }
+
+  return repository.updateStatus(contractId, "rejected", user.id, reason);
+}
+
+/*
+=====================================================
+GERAR PDF (SÓ SE APROVADO)
+=====================================================
+*/
+
 async function generateContract(contractId) {
   const client = await db.connect();
 
   try {
     await client.query("BEGIN");
 
-    // Buscar contrato
     const contract = await repository.findById(contractId);
 
     if (!contract) {
       throw new Error("Contrato não encontrado.");
     }
 
-    // 🔒 BLOQUEIO PRINCIPAL
+    // 🔒 BLOQUEIO: só gera PDF se aprovado
     if (contract.status !== "approved") {
-      throw new Error("Contrato precisa estar aprovado para gerar PDF.");
+      throw new Error(
+        "Contrato precisa estar aprovado para gerar PDF."
+      );
     }
 
-    // Buscar dados da venda vinculada
     const sale = await repository.findSaleById(contract.sale_id);
 
     if (!sale) {
@@ -70,3 +192,11 @@ async function generateContract(contractId) {
     client.release();
   }
 }
+
+module.exports = {
+  updateContract,
+  sendForApproval,
+  approveContract,
+  rejectContract,
+  generateContract
+};

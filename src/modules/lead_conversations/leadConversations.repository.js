@@ -1,36 +1,28 @@
-const pool = require("../../config/db");
+const db = require("../../config/db");
 
-async function addMessage(data) {
-  const result = await pool.query(
+async function saveMessage({ dealershipId, leadId, sender, message }) {
+  await db.query(
     `INSERT INTO lead_conversations
-     (dealership_id, lead_id, role, message)
-     VALUES ($1,$2,$3,$4)
-     RETURNING *`,
-    [
-      data.dealership_id,
-      data.lead_id,
-      data.role,
-      data.message
-    ]
+     (dealership_id, lead_id, sender, message)
+     VALUES ($1, $2, $3, $4)`,
+    [dealershipId, leadId, sender, message]
   );
-
-  return result.rows[0];
 }
 
-async function getRecentMessages(leadId, limit = 10) {
-  const result = await pool.query(
-    `SELECT role, message
+async function getRecentHistory(leadId, limit = 15) {
+  const { rows } = await db.query(
+    `SELECT sender, message
      FROM lead_conversations
      WHERE lead_id = $1
-     ORDER BY id DESC
+     ORDER BY created_at DESC
      LIMIT $2`,
     [leadId, limit]
   );
 
-  return result.rows.reverse();
+  return rows.reverse();
 }
 
 module.exports = {
-  addMessage,
-  getRecentMessages
+  saveMessage,
+  getRecentHistory
 };

@@ -1,12 +1,12 @@
-// src/modules/contracts/contract.controller.js
+// src/modules/contracts/contracts.controller.js
 
-const contractService = require("./contract.service");
+const service = require("./contracts.service");
 
-async function generateContract(req, res) {
+async function generate(req, res) {
   try {
     const { saleId } = req.params;
 
-    const contract = await contractService.createContract(saleId);
+    const contract = await service.generateContract(saleId);
 
     return res.status(201).json({
       success: true,
@@ -24,5 +24,5 @@ async function generateContract(req, res) {
 }
 
 module.exports = {
-  generateContract
+  generate
 };

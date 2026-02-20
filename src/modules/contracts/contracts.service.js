@@ -2,10 +2,7 @@
 
 const path = require("path");
 const { generatePDF } = require("./contract.generator");
-const { Pool } = require("pg");
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
+const db = require("../../config/db")
 });
 
 async function getSaleById(saleId) {

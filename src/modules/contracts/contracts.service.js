@@ -1,28 +1,80 @@
-const repository = require("./contracts.repository");
+// src/modules/contracts/contract.service.js
 
-async function generateContract(saleId, user) {
+const path = require("path");
+const { generatePDF } = require("./contract.generator");
+const { Pool } = require("pg");
 
-  const sale = await repository.getSaleById(saleId);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
+
+async function getSaleById(saleId) {
+  const { rows } = await pool.query(
+    "SELECT * FROM sales WHERE id = $1",
+    [saleId]
+  );
+
+  return rows[0];
+}
+
+async function getNextVersion(saleId) {
+  const { rows } = await pool.query(
+    "SELECT MAX(version) as max_version FROM contracts WHERE sale_id = $1",
+    [saleId]
+  );
+
+  return (rows[0].max_version || 0) + 1;
+}
+
+async function createContract(saleId) {
+  const sale = await getSaleById(saleId);
 
   if (!sale) {
-    throw new Error("Venda não encontrada");
+    throw new Error("Venda não encontrada.");
   }
 
-  if (sale.approval_status !== "approved") {
-    throw new Error("Venda ainda não aprovada pelo gerente");
+  if (sale.status !== "approved") {
+    throw new Error("Contrato só pode ser gerado para vendas aprovadas.");
   }
 
-  const contract = await repository.createContract({
-    dealership_id: sale.dealership_id,
-    sale_id: sale.id,
-    vehicle_id: sale.vehicle_id,
-    client_id: sale.client_id,
-    user_id: user.id
+  const version = await getNextVersion(saleId);
+
+  const templateName = sale.trade_vehicle_brand
+    ? "contract-sale-trade.html"
+    : "contract-sale.html";
+
+  const fileName = `contract-${saleId}-v${version}.pdf`;
+  const outputPath = path.join(
+    process.cwd(),
+    "uploads",
+    "contracts",
+    fileName
+  );
+
+  const contractDate = new Date().toLocaleDateString("pt-BR");
+
+  const data = {
+    ...sale,
+    CONTRACT_DATE: contractDate
+  };
+
+  const { hash } = await generatePDF({
+    templateName,
+    data,
+    outputPath
   });
 
-  return contract;
+  const { rows } = await pool.query(
+    `INSERT INTO contracts 
+     (sale_id, version, file_path, hash, created_at)
+     VALUES ($1, $2, $3, $4, NOW())
+     RETURNING *`,
+    [saleId, version, outputPath, hash]
+  );
+
+  return rows[0];
 }
 
 module.exports = {
-  generateContract
+  createContract
 };

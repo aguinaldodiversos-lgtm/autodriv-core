@@ -1,19 +1,28 @@
-const service = require("./contracts.service");
+// src/modules/contracts/contract.controller.js
 
-async function create(req, res) {
+const contractService = require("./contract.service");
+
+async function generateContract(req, res) {
   try {
-    const contract = await service.generateContract(
-      req.params.saleId,
-      req.user
-    );
+    const { saleId } = req.params;
 
-    res.json(contract);
+    const contract = await contractService.createContract(saleId);
 
-  } catch (err) {
-    res.status(400).json({ error: err.message });
+    return res.status(201).json({
+      success: true,
+      contract
+    });
+
+  } catch (error) {
+    console.error("Erro ao gerar contrato:", error.message);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message
+    });
   }
 }
 
 module.exports = {
-  create
+  generateContract
 };

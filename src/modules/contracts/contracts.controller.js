@@ -2,6 +2,36 @@
 
 const service = require("./contracts.service");
 
+async function sendForApproval(req, res) {
+  try {
+    const { id } = req.params;
+    const result = await service.sendForApproval(id);
+    return res.json({ success: true, result });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+}
+
+async function approve(req, res) {
+  try {
+    const { id } = req.params;
+    const result = await service.approveContract(id, req.user);
+    return res.json({ success: true, result });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+}
+
+async function reject(req, res) {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const result = await service.rejectContract(id, req.user, reason);
+    return res.json({ success: true, result });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+}
 async function generate(req, res) {
   try {
     const { saleId } = req.params;

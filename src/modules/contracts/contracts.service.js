@@ -5,6 +5,41 @@ const db = require("../../config/db");
 const repository = require("./contracts.repository");
 const { generatePDF } = require("./contract.generator");
 
+async function sendForApproval(contractId) {
+  const contract = await repository.findById(contractId);
+
+  if (!contract) throw new Error("Contrato não encontrado.");
+  if (contract.status !== "draft")
+    throw new Error("Somente contratos em rascunho podem ser enviados.");
+
+  return repository.updateStatus(contractId, "pending_approval", null, null);
+}
+
+async function approveContract(contractId, user) {
+  if (!["manager", "admin"].includes(user.role)) {
+    throw new Error("Sem permissão para aprovar.");
+  }
+
+  const contract = await repository.findById(contractId);
+
+  if (contract.status !== "pending_approval")
+    throw new Error("Contrato não está pendente.");
+
+  return repository.updateStatus(contractId, "approved", user.id);
+}
+
+async function rejectContract(contractId, user, reason) {
+  if (!["manager", "admin"].includes(user.role)) {
+    throw new Error("Sem permissão para rejeitar.");
+  }
+
+  const contract = await repository.findById(contractId);
+
+  if (contract.status !== "pending_approval")
+    throw new Error("Contrato não está pendente.");
+
+  return repository.updateStatus(contractId, "rejected", user.id, reason);
+}
 async function generateContract(saleId) {
   const client = await db.connect();
 

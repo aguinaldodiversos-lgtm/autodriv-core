@@ -200,3 +200,52 @@ module.exports = {
   rejectContract,
   generateContract
 };
+/*
+=====================================================
+CRIAR NOVA VERSÃO DO CONTRATO (DUPLICAR)
+=====================================================
+*/
+
+async function duplicateContract(contractId, user) {
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const contract = await repository.findById(contractId);
+
+    if (!contract) {
+      throw new Error("Contrato não encontrado.");
+    }
+
+    // 🔒 Só pode duplicar contrato aprovado
+    if (contract.status !== "approved") {
+      throw new Error(
+        "Somente contratos aprovados podem gerar nova versão."
+      );
+    }
+
+    // 🔐 Permissão mínima
+    if (!["seller", "manager", "admin"].includes(user.role)) {
+      throw new Error("Você não tem permissão para duplicar contrato.");
+    }
+
+    const newVersion = contract.version + 1;
+
+    const newContract = await repository.createDraftFromPrevious(
+      contract,
+      newVersion,
+      client
+    );
+
+    await client.query("COMMIT");
+
+    return newContract;
+
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}

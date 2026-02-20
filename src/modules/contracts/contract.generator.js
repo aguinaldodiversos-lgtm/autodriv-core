@@ -7,7 +7,7 @@ const crypto = require("crypto");
 
 async function loadTemplate(templateName) {
   const filePath = path.join(__dirname, "templates", templateName);
-  return await fs.readFile(filePath, "utf8");
+  return fs.readFile(filePath, "utf8");
 }
 
 function sanitize(value) {
@@ -30,20 +30,15 @@ function replacePlaceholders(template, data) {
   return html;
 }
 
-async function ensureDirectoryExists(dirPath) {
-  try {
-    await fs.mkdir(dirPath, { recursive: true });
-  } catch (err) {
-    console.error("Erro ao criar diretório:", err);
-    throw err;
-  }
+async function ensureDir(dirPath) {
+  await fs.mkdir(dirPath, { recursive: true });
 }
 
 async function generatePDF({ templateName, data, outputPath }) {
   const template = await loadTemplate(templateName);
-  const htmlContent = replacePlaceholders(template, data);
+  const html = replacePlaceholders(template, data);
 
-  await ensureDirectoryExists(path.dirname(outputPath));
+  await ensureDir(path.dirname(outputPath));
 
   const browser = await puppeteer.launch({
     headless: "new",
@@ -52,9 +47,7 @@ async function generatePDF({ templateName, data, outputPath }) {
 
   const page = await browser.newPage();
 
-  await page.setContent(htmlContent, {
-    waitUntil: "networkidle0"
-  });
+  await page.setContent(html, { waitUntil: "networkidle0" });
 
   await page.pdf({
     path: outputPath,
@@ -70,11 +63,10 @@ async function generatePDF({ templateName, data, outputPath }) {
 
   await browser.close();
 
-  // Gerar hash de integridade
-  const fileBuffer = await fs.readFile(outputPath);
-  const hash = crypto.createHash("sha256").update(fileBuffer).digest("hex");
+  const buffer = await fs.readFile(outputPath);
+  const hash = crypto.createHash("sha256").update(buffer).digest("hex");
 
-  return { outputPath, hash };
+  return { hash };
 }
 
 module.exports = {

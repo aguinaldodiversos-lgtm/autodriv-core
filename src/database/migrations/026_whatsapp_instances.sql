@@ -1,9 +1,16 @@
-CREATE TABLE IF NOT EXISTS whatsapp_instances (
+CREATE TABLE whatsapp_instances (
   id SERIAL PRIMARY KEY,
   dealership_id INTEGER NOT NULL,
+
+  name TEXT,
   phone_number TEXT NOT NULL,
-  zapi_instance TEXT NOT NULL,
-  zapi_token TEXT NOT NULL,
+
+  provider TEXT DEFAULT 'zapi', -- futuro: baileys, twilio, etc
+  provider_instance TEXT,
+  provider_token TEXT,
+
+  status TEXT DEFAULT 'disconnected',
+
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
 
@@ -13,5 +20,8 @@ CREATE TABLE IF NOT EXISTS whatsapp_instances (
     ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_phone
+CREATE INDEX idx_whatsapp_instances_dealership
+ON whatsapp_instances(dealership_id);
+
+CREATE UNIQUE INDEX idx_whatsapp_phone
 ON whatsapp_instances(phone_number);

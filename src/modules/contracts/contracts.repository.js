@@ -20,6 +20,7 @@ async function update(contractId, data) {
     contractId
   ];
 
+
   const { rows } = await db.query(query, values);
 
   if (!rows[0]) {

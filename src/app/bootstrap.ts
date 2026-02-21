@@ -6,7 +6,19 @@ import { CloudflareQueueAdapter } from "@/infrastructure/queue/cloudflare.queue"
 import { EventStore } from "@/infrastructure/event-bus/event.store"
 import { EventBus } from "@/infrastructure/event-bus/event.bus"
 import { AcquisitionEngine } from "@/brain/acquisition.engine"
+import { LocalAIService } from "@/infrastructure/ai/local-ai.service"
 
+export async function bootstrap(env: any) {
+  const db = createDatabaseClient(env)
+
+  const localAI = new LocalAIService()
+  await localAI.init()
+
+  return {
+    db,
+    localAI
+  }
+}
 export function bootstrap(env: any) {
   const db = createDatabaseClient(env)
 

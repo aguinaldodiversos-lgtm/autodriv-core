@@ -2,6 +2,7 @@ import { DomainEvent } from "./event.types"
 import { EventHandler } from "./event.handler"
 import { QueueClient } from "@/infrastructure/queue/queue.client"
 import { EventStore } from "./event.store"
+import { executeWithRetry } from "@/infrastructure/queue/retry.policy"
 
 export class EventBus {
   private handlers: Map<string, EventHandler[]> = new Map()
@@ -32,10 +33,23 @@ export class EventBus {
     const handlers = this.handlers.get(job.name)
     if (!handlers) return
 
-    await Promise.all(
-      handlers.map((handler) =>
-        handler.handle(job.payload)
-      )
-    )
+    for (const handler of handlers) {
+      try {
+        await executeWithRetry(
+          () => handler.handle(job.payload),
+          { attempts: 3, backoffMs: 500 }
+        )
+      } catch (err) {
+        await this.eventStore.append({
+          name: "event.failed",
+          payload: {
+            originalEvent: job.payload,
+            error: String(err),
+          },
+          tenantId: job.payload.tenantId,
+          occurredAt: new Date(),
+        })
+      }
+    }
   }
 }

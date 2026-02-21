@@ -1,24 +1,23 @@
-// src/brain/visit-pipeline.engine.js
+const LeadCore = require("./lead-intelligence.core")
 
 class VisitPipelineEngine {
 
-  nextStage(currentStage, action) {
+  constructor() {
+    this.leadCore = new LeadCore()
+  }
 
-    const transitions = {
-      NEW: "CONTACTED",
-      CONTACTED: "VISIT_PROPOSED",
-      VISIT_PROPOSED: "VISIT_SCHEDULED",
-      VISIT_SCHEDULED: "VISIT_CONFIRMED",
-      VISIT_CONFIRMED: "VISIT_COMPLETED"
-    }
+  nextStage(leadData) {
 
-    if (action === "NO_SHOW")
-      return "NO_SHOW"
+    const unifiedScore =
+      this.leadCore.evaluate(leadData)
 
-    if (action === "SOLD")
-      return "SOLD"
+    if (unifiedScore > 75)
+      return "VISIT_SCHEDULED"
 
-    return transitions[currentStage] || currentStage
+    if (unifiedScore > 50)
+      return "VISIT_PROPOSED"
+
+    return "CONTACTED"
   }
 }
 

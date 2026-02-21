@@ -1,6 +1,6 @@
 import { DomainEvent } from "./event.types"
 
-export interface EventHandler {
+export interface EventHandler<T = any> {
   eventName: string
-  handle(event: DomainEvent): Promise<void>
+  handle(event: DomainEvent<T>): Promise<void>
 }

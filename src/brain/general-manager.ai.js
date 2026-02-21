@@ -1,92 +1,44 @@
 // src/brain/general-manager.ai.js
 
+const RevenueCore = require("./revenue-intelligence.core")
 const HealthScoreEngine = require("./health-score.engine")
 const FinancialRiskEngine = require("./financial-risk.engine")
-const StockAlertEngine = require("./stock-alert.engine")
-const DiagnosticEngine = require("./diagnostic.engine")
-const RecommendationEngine = require("./recommendation.engine")
-const AcquisitionEngine = require("./acquisition.engine")
 
 class GeneralManagerAI {
+
   constructor() {
-    this.healthEngine = new HealthScoreEngine()
-    this.riskEngine = new FinancialRiskEngine()
-    this.stockAlertEngine = new StockAlertEngine()
-    this.diagnosticEngine = new DiagnosticEngine()
-    this.recommendationEngine = new RecommendationEngine()
-    this.acquisitionEngine = new AcquisitionEngine()
+    this.revenue = new RevenueCore()
+    this.health = new HealthScoreEngine()
+    this.risk = new FinancialRiskEngine()
   }
 
-  async generateDailyExecutiveReport(tenantId) {
-    const startedAt = Date.now()
+  async generate(tenantData) {
 
-    try {
-      // 1️⃣ Saúde da loja
-      const health = await this.healthEngine.calculate(tenantId)
+    const revenueEvaluation =
+      await this.revenue.evaluateSystem(tenantData)
 
-      // 2️⃣ Risco financeiro
-      const riskData = await this.riskEngine.analyze(tenantId)
+    const health =
+      await this.health.calculate(tenantData.tenantId)
 
-      // 3️⃣ Estoque crítico
-      const estoqueCritico = await this.stockAlertEngine.check(tenantId)
+    const risk =
+      await this.risk.analyze(tenantData.tenantId)
 
-      // 4️⃣ Performance de canais
-      const canais = await this.acquisitionEngine.analyze(tenantId)
+    return {
+      globalHealthScore:
+        revenueEvaluation.globalHealth,
 
-      const piorCanal = canais.length
-        ? canais.sort((a, b) => a.roi - b.roi)[0]
-        : null
+      vehicleScore:
+        revenueEvaluation.vehicleScore,
 
-      // 5️⃣ Diagnóstico inteligente
-      const diagnostic = await this.diagnosticEngine.generate({
-        vendas: health.vendas,
-        estoque: health.estoque,
-        capitalTravado: health.capitalTravado,
-        risco: riskData.risco
-      })
+      leadScore:
+        revenueEvaluation.leadScore,
 
-      // 6️⃣ Recomendações executivas
-      const recomendacoes = this.recommendationEngine.generate({
-        risco: riskData.risco,
-        estoqueCritico,
-        piorCanal
-      })
+      channelScore:
+        revenueEvaluation.channelScore,
 
-      const executionTime = Date.now() - startedAt
-
-      return {
-        meta: {
-          tenantId,
-          geradoEm: new Date(),
-          tempoProcessamentoMs: executionTime
-        },
-
-        indicadores: {
-          healthScore: health.healthScore,
-          riscoFinanceiro: riskData.risco,
-          capitalTravado: riskData.capitalTravado,
-          vendasMensais: riskData.vendasMensais
-        },
-
-        alertas: {
-          estoqueCritico,
-          canalQueQueimaCaixa: piorCanal?.roi < 0 ? piorCanal : null
-        },
-
-        diagnostico: diagnostic.resumo,
-        sentimentoOperacional: diagnostic.sentimentoOperacional || null,
-
-        recomendacoes
-      }
-
-    } catch (error) {
-      console.error("Erro no GeneralManagerAI:", error)
-
-      return {
-        error: true,
-        message: "Falha ao gerar relatório executivo",
-        detalhes: error.message
-      }
+      financialRisk: risk.risco,
+      capitalTravado: risk.capitalTravado,
+      vendasMensais: risk.vendasMensais
     }
   }
 }

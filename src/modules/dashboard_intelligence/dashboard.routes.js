@@ -1,9 +1,20 @@
-const express = require("express");
-const controller = require("./dashboard.controller");
-const auth = require("../../middlewares/auth.middleware");
+const express = require("express")
+const router = express.Router()
+const GeneralManagerAI = require("../../brain/general-manager.ai")
 
-const router = express.Router();
+router.get("/executive/:tenantId", async (req, res) => {
+  try {
+    const gm = new GeneralManagerAI()
+    const report = await gm.generateDailyExecutiveReport(
+      req.params.tenantId
+    )
 
-router.get("/", auth, controller.getDashboard);
+    res.json(report)
+  } catch (error) {
+    res.status(500).json({
+      error: "Falha ao gerar relatório executivo"
+    })
+  }
+})
 
-module.exports = router;
+module.exports = router

@@ -1,41 +1,75 @@
 // src/app/bootstrap.ts
 
-import { createDatabaseClient } from "@/infrastructure/db"
-import { InMemoryQueue } from "@/infrastructure/queue/in-memory.queue"
-import { CloudflareQueueAdapter } from "@/infrastructure/queue/cloudflare.queue"
-import { EventStore } from "@/infrastructure/event-bus/event.store"
 import { EventBus } from "@/infrastructure/event-bus/event.bus"
-import { AcquisitionEngine } from "@/brain/acquisition.engine"
-import { LocalAIService } from "@/infrastructure/ai/local-ai.service"
+import { DatabaseClient } from "@/infrastructure/db/client"
+import { RevenueSnapshotRepository } from "@/infrastructure/db/repositories/revenue-snapshot.repository"
 
-export async function bootstrap(env: any) {
-  const db = createDatabaseClient(env)
+import { RevenueIntelligenceCore } from "@/brain/revenue-intelligence.core"
+import { DecisionEngine } from "@/brain/decision.engine"
+import { SnapshotHandler } from "@/brain/snapshot.handler"
 
-  const localAI = new LocalAIService()
-  await localAI.init()
+import { logger } from "@/infrastructure/logger/logger"
 
-  return {
-    db,
-    localAI
-  }
+export interface AppContext {
+  db: DatabaseClient
+  eventBus: EventBus
+  revenueCore: RevenueIntelligenceCore
+  decisionEngine: DecisionEngine
 }
-export function bootstrap(env: any) {
-  const db = createDatabaseClient(env)
 
-  const queue =
-    env.QUEUE_TYPE === "cloudflare"
-      ? new CloudflareQueueAdapter(env.AIP_QUEUE)
-      : new InMemoryQueue()
+export async function bootstrap(
+  env: any
+): Promise<AppContext> {
 
-  const eventStore = new EventStore(db)
-  const eventBus = new EventBus(queue, eventStore)
+  logger.info("🚀 Bootstrapping AIP...")
 
-  const acquisitionEngine = new AcquisitionEngine(db, eventBus)
+  /**
+   * 1️⃣ Database
+   */
+  const db = new DatabaseClient(env)
 
-  eventBus.register(acquisitionEngine)
+  /**
+   * 2️⃣ Event Bus
+   */
+  const eventBus = new EventBus()
+
+  /**
+   * 3️⃣ Core Engines
+   */
+  const revenueCore = new RevenueIntelligenceCore()
+  const decisionEngine = new DecisionEngine(revenueCore)
+
+  /**
+   * 4️⃣ Snapshot Repository
+   */
+  const snapshotRepository =
+    new RevenueSnapshotRepository(db)
+
+  /**
+   * 5️⃣ Register Event Handlers
+   */
+  const snapshotHandler =
+    new SnapshotHandler(
+      snapshotRepository,
+      revenueCore
+    )
+
+  eventBus.register(snapshotHandler)
+
+  /**
+   * 6️⃣ Health Check Log
+   */
+  logger.info("✅ EventBus initialized")
+  logger.info("✅ RevenueCore initialized")
+  logger.info("✅ DecisionEngine initialized")
+  logger.info("✅ SnapshotHandler registered")
+
+  logger.info("🎯 AIP Ready")
 
   return {
     db,
     eventBus,
+    revenueCore,
+    decisionEngine
   }
 }

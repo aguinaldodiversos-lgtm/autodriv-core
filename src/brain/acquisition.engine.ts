@@ -1,30 +1,53 @@
-import { BaseEngine } from "./base.engine"
-import { DomainEvent } from "@/infrastructure/event-bus/event.types"
+// src/brain/acquisition.engine.ts
 
-export class AcquisitionEngine extends BaseEngine {
-  eventName = "lead.created"
+import { DatabaseClient } from "@/infrastructure/db/client"
 
-  protected async execute(event: DomainEvent): Promise<void> {
-    const { leadId } = event.payload
+export class AcquisitionIntelligenceEngine {
+  constructor(private db: DatabaseClient) {}
 
+  async analyze(tenantId: string) {
     const leads = await this.db.query({
       text: `
-        SELECT COUNT(*) as total
+        SELECT source, COUNT(*) as total,
+        SUM(CASE WHEN status = 'sold' THEN 1 ELSE 0 END) as vendidos
         FROM leads
         WHERE tenant_id = $1
+        GROUP BY source
       `,
-      params: [event.tenantId],
+      params: [tenantId]
     })
 
-    const totalLeads = Number(leads[0]?.total || 0)
+    const custos = await this.db.query({
+      text: `
+        SELECT source, SUM(cost) as investimento
+        FROM marketing_spend
+        WHERE tenant_id = $1
+        GROUP BY source
+      `,
+      params: [tenantId]
+    })
 
-    if (totalLeads > 100) {
-      await this.eventBus.publish({
-        name: "acquisition.threshold.reached",
-        payload: { totalLeads },
-        tenantId: event.tenantId,
-        occurredAt: new Date(),
-      })
-    }
+    const resultado = leads.map(l => {
+      const investimento =
+        custos.find(c => c.source === l.source)
+          ?.investimento || 0
+
+      const cac =
+        investimento / (l.vendidos || 1)
+
+      const roi =
+        (l.vendidos * 3000 - investimento) /
+        (investimento || 1)
+
+      return {
+        source: l.source,
+        totalLeads: l.total,
+        vendidos: l.vendidos,
+        cac,
+        roi
+      }
+    })
+
+    return resultado
   }
 }

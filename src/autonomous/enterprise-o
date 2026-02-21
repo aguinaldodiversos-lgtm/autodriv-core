@@ -1,0 +1,35 @@
+// src/autonomous/enterprise-os.ts
+
+import { EventBus } from "@/infrastructure/event-bus/event.bus"
+import { GovernanceEngine } from "@/infrastructure/governance/governance.engine"
+import { SelfHealingEngine } from "@/infrastructure/self-healing/self-healing.engine"
+import { EconomicOptimizer } from "@/infrastructure/ai/economic.optimizer"
+
+export class EnterpriseOS {
+  constructor(
+    private eventBus: EventBus,
+    private governance: GovernanceEngine,
+    private selfHealing: SelfHealingEngine,
+    private optimizer: EconomicOptimizer
+  ) {}
+
+  async evaluate(context: any) {
+    const modelDecision = this.optimizer.decideModel(
+      context.margin,
+      context.aiCost,
+      context.probability
+    )
+
+    await this.governance.evaluate(modelDecision, context)
+
+    await this.eventBus.publish({
+      id: crypto.randomUUID(),
+      name: "enterprise.decision.executed",
+      payload: { decision: modelDecision },
+      tenantId: context.tenantId,
+      occurredAt: new Date()
+    })
+
+    await this.selfHealing.evaluate()
+  }
+}

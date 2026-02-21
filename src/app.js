@@ -3,6 +3,8 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 
+const localAI = require("./infrastructure/ai/localAI.service");
+
 const app = express();
 
 /* =========================
@@ -11,6 +13,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+/* =========================
+   INICIALIZAÇÃO SEGURA DA IA LOCAL
+========================= */
+async function initializeLocalAI() {
+  try {
+    await localAI.init();
+    console.log("🧠 IA Local inicializada com sucesso");
+  } catch (error) {
+    console.error("⚠️ IA Local desabilitada:", error.message);
+    // NÃO derruba o sistema
+  }
+}
+
+// inicializa sem bloquear o app
+initializeLocalAI();
 
 /* =========================
    ROTAS
@@ -25,7 +43,6 @@ const pipelineRoutes = require("./modules/pipeline/pipeline.routes");
 const leadsImportRoutes = require("./modules/leads_import/leadsImport.routes");
 const whatsappRoutes = require("./modules/whatsapp/whatsapp.routes");
 const inboxRoutes = require("./modules/inbox/inbox.routes");
-const whatsappRoutes = require("./modules/whatsapp/whatsapp.routes");
 const leadDistributionRoutes = require("./modules/lead_distribution/distribution.routes");
 const forecastRoutes = require("./modules/analytics/forecast.routes");
 const dashboardIntelligenceRoutes = require("./modules/dashboard_intelligence/dashboard.routes");
@@ -46,7 +63,8 @@ const approvalDashboardRoutes = require("./modules/approval_dashboard/approvalDa
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
-    service: "autodriv-core"
+    service: "autodriv-core",
+    localAI: localAI ? "initialized_or_attempted" : "not_loaded"
   });
 });
 
@@ -63,7 +81,6 @@ app.use("/api/pipeline", pipelineRoutes);
 app.use("/api/leads-import", leadsImportRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/inbox", inboxRoutes);
-app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/lead-distribution", leadDistributionRoutes);
 app.use("/api/forecast", forecastRoutes);
 app.use("/api/dashboard-intelligence", dashboardIntelligenceRoutes);

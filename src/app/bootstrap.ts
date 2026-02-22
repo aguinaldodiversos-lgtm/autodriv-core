@@ -57,7 +57,16 @@ export async function bootstrap(env: any): Promise<AppContext> {
    * 6️⃣ Visit Engine
    */
   const visitPipeline = new VisitPipelineEngine()
+  
+  const brain = new BrainOrchestrator(
+  revenueCore,
+  decisionEngine,
+  eventBus
+)
 
+eventBus.register(
+  new BrainHandler(brain)
+)
   /**
    * 7️⃣ Handlers Registration
    */

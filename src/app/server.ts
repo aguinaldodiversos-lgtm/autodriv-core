@@ -10,6 +10,7 @@ async function start() {
   app.use(express.json())
 
   const context = await bootstrap(process.env)
+  
   app.use("/api/system", systemRoutes(context))
   app.get("/health", (_, res) => {
     res.json({ status: "AIP running" })

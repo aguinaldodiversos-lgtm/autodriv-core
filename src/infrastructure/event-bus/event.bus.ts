@@ -1,78 +1,109 @@
-// src/infrastructure/event-bus/event.bus.ts
+async publish<T = any>(
+  event: DomainEvent<T>
+): Promise<void> {
 
-import PQueue from "p-queue"
-import { DomainEvent } from "./event.types"
-import { EventHandler } from "./event.handler"
-import { EventStore } from "./event.store"
-import { logger } from "@/infrastructure/logger/logger"
+  try {
 
-export class EventBus {
+    /**
+     * 🛑 1️⃣ Idempotência
+     */
+    const alreadyProcessed =
+      await this.eventStore.isProcessed(event.id)
 
-  private handlers: EventHandler[] = []
-  private queue: PQueue
-
-  constructor(
-    private eventStore: EventStore,
-    concurrency: number = 20
-  ) {
-    this.queue = new PQueue({
-      concurrency,
-      autoStart: true
-    })
-  }
-
-  register(handler: EventHandler): void {
-    this.handlers.push(handler)
-  }
-
-  async publish<T = any>(
-    event: DomainEvent<T>
-  ): Promise<void> {
-
-    try {
-
-      /**
-       * 🔥 1️⃣ Persistir evento antes de qualquer execução
-       */
-      await this.eventStore.persist(event)
-
-      logger.info(
-        `📤 Event persisted: ${event.name} | Tenant: ${event.tenantId}`
+    if (alreadyProcessed) {
+      logger.warn(
+        `⚠️ Event already processed: ${event.name} | ${event.id}`
       )
-
-    } catch (error) {
-
-      logger.error(
-        `❌ Failed to persist event: ${event.name}`,
-        error
-      )
-
-      // Se não persistir, não executa handlers
       return
     }
 
     /**
-     * 🔥 2️⃣ Executar handlers assincronamente
+     * 📦 2️⃣ Persistir evento (Event Sourcing)
      */
-    const matchingHandlers =
-      this.handlers.filter(handler =>
-        handler.eventName === event.name ||
-        handler.eventName === "*"
-      )
+    await this.eventStore.persist(event)
 
-    await Promise.all(
-      matchingHandlers.map(handler =>
-        this.queue.add(async () => {
-          try {
-            await handler.handle(event)
-          } catch (error) {
-            logger.error(
-              `❌ Handler error: ${handler.constructor.name}`,
-              error
-            )
-          }
-        })
-      )
+    logger.info(
+      `📤 Event persisted: ${event.name} | Tenant: ${event.tenantId}`
+    )
+
+  } catch (error) {
+
+    logger.error(
+      `❌ Failed to persist event: ${event.name}`,
+      error
+    )
+
+    // Se falhar persistência, não executa handlers
+    return
+  }
+
+  /**
+   * 🔎 3️⃣ Selecionar handlers compatíveis
+   */
+  const matchingHandlers =
+    this.handlers.filter(handler =>
+      handler.eventName === event.name ||
+      handler.eventName === "*"
+    )
+
+  if (matchingHandlers.length === 0) {
+
+    logger.warn(
+      `⚠️ No handlers found for event: ${event.name}`
+    )
+
+    await this.eventStore.markProcessed(event.id)
+    return
+  }
+
+  /**
+   * ⚡ 4️⃣ Executar handlers em paralelo controlado
+   */
+  await Promise.all(
+    matchingHandlers.map(handler =>
+      this.queue.add(async () => {
+
+        const start = Date.now()
+
+        try {
+
+          await handler.handle(event)
+
+          const duration = Date.now() - start
+
+          logger.info(
+            `✅ Handler executed: ${handler.constructor.name} | ${duration}ms`
+          )
+
+        } catch (error) {
+
+          logger.error(
+            `❌ Handler error: ${handler.constructor.name}`,
+            error
+          )
+
+          // Não interrompe outros handlers
+        }
+      })
+    )
+  )
+
+  /**
+   * ✅ 5️⃣ Marcar como processado
+   */
+  try {
+
+    await this.eventStore.markProcessed(event.id)
+
+    logger.info(
+      `✔ Event marked as processed: ${event.id}`
+    )
+
+  } catch (error) {
+
+    logger.error(
+      `❌ Failed to mark event as processed: ${event.id}`,
+      error
     )
   }
 }

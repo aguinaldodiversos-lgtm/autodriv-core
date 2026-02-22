@@ -1,18 +1,58 @@
-import { Request, Response } from "express"
+// src/interfaces/http/controllers/system.controller.ts
+
+import { Request, Response, NextFunction } from "express"
 import { ReplayTenantUseCase } from "@/application/use-cases/system/replay-tenant.usecase"
+import { logger } from "@/infrastructure/logger/logger"
 
 export class SystemController {
 
   constructor(
-    private replayTenant: ReplayTenantUseCase
+    private replayTenantUseCase: ReplayTenantUseCase
   ) {}
 
-  replay = async (req: Request, res: Response) => {
+  /**
+   * 🔁 POST /api/system/replay/:tenantId
+   * Reconstrói estado completo do tenant
+   */
+  replay = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
 
-    const { tenantId } = req.params
+    try {
 
-    await this.replayTenant.execute(tenantId)
+      const { tenantId } = req.params
 
-    res.json({ status: "replay completed" })
+      if (!tenantId) {
+        res.status(400).json({
+          success: false,
+          message: "tenantId is required"
+        })
+        return
+      }
+
+      logger.info(
+        `🛠 Admin replay requested for tenant: ${tenantId}`
+      )
+
+      const result =
+        await this.replayTenantUseCase.execute(tenantId)
+
+      res.status(200).json({
+        success: true,
+        message: "Replay completed successfully",
+        data: result
+      })
+
+    } catch (error) {
+
+      logger.error(
+        "❌ Admin replay failed",
+        error
+      )
+
+      next(error)
+    }
   }
 }

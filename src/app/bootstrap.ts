@@ -1,12 +1,18 @@
 // src/app/bootstrap.ts
 
-import { EventBus } from "@/infrastructure/event-bus/event.bus"
 import { DatabaseClient } from "@/infrastructure/db/client"
-import { RevenueSnapshotRepository } from "@/infrastructure/db/repositories/revenue-snapshot.repository"
+import { EventBus } from "@/infrastructure/event-bus/event.bus"
+import { EventStore } from "@/infrastructure/event-bus/event.store"
 
-import { RevenueIntelligenceCore } from "@/brain/revenue-intelligence.core"
-import { DecisionEngine } from "@/brain/decision.engine"
-import { SnapshotHandler } from "@/brain/snapshot.handler"
+import { RevenueIntelligenceCore } from "@/brain/revenue/revenue.core"
+import { DecisionEngine } from "@/brain/revenue/decision.engine"
+import { SnapshotHandler } from "@/brain/revenue/snapshot.handler"
+
+import { MarketingSuperEngine } from "@/brain/marketing/campaign.engine"
+import { MarketingHandler } from "@/brain/marketing/marketing.handler"
+
+import { VisitPipelineEngine } from "@/brain/conversion/visit.pipeline"
+import { VisitHandler } from "@/brain/conversion/visit.handler"
 
 import { logger } from "@/infrastructure/logger/logger"
 
@@ -17,11 +23,9 @@ export interface AppContext {
   decisionEngine: DecisionEngine
 }
 
-export async function bootstrap(
-  env: any
-): Promise<AppContext> {
+export async function bootstrap(env: any): Promise<AppContext> {
 
-  logger.info("🚀 Bootstrapping AIP...")
+  logger.info("🚀 Bootstrapping AIP 2.0...")
 
   /**
    * 1️⃣ Database
@@ -29,42 +33,63 @@ export async function bootstrap(
   const db = new DatabaseClient(env)
 
   /**
-   * 2️⃣ Event Bus
+   * 2️⃣ Event Store (Event Sourcing base)
    */
-  const eventBus = new EventBus()
+  const eventStore = new EventStore(db)
 
   /**
-   * 3️⃣ Core Engines
+   * 3️⃣ Event Bus (Sistema Nervoso)
+   */
+  const eventBus = new EventBus(eventStore, 20)
+
+  /**
+   * 4️⃣ Core Intelligence
    */
   const revenueCore = new RevenueIntelligenceCore()
   const decisionEngine = new DecisionEngine(revenueCore)
 
   /**
-   * 4️⃣ Snapshot Repository
+   * 5️⃣ Marketing Engine
    */
-  const snapshotRepository =
-    new RevenueSnapshotRepository(db)
+  const marketingEngine = new MarketingSuperEngine()
 
   /**
-   * 5️⃣ Register Event Handlers
+   * 6️⃣ Visit Engine
    */
-  const snapshotHandler =
-    new SnapshotHandler(
-      snapshotRepository,
-      revenueCore
-    )
-
-  eventBus.register(snapshotHandler)
+  const visitPipeline = new VisitPipelineEngine()
 
   /**
-   * 6️⃣ Health Check Log
+   * 7️⃣ Handlers Registration
    */
+
+  // Snapshot automático
+  eventBus.register(
+    new SnapshotHandler(db, revenueCore)
+  )
+
+  // Decisão central
+  eventBus.register(
+    new DecisionEngine(revenueCore)
+  )
+
+  // Marketing reativo
+  eventBus.register(
+    new MarketingHandler(marketingEngine)
+  )
+
+  // Conversão reativa
+  eventBus.register(
+    new VisitHandler(visitPipeline)
+  )
+
+  logger.info("✅ Database initialized")
+  logger.info("✅ EventStore initialized")
   logger.info("✅ EventBus initialized")
   logger.info("✅ RevenueCore initialized")
   logger.info("✅ DecisionEngine initialized")
-  logger.info("✅ SnapshotHandler registered")
-
-  logger.info("🎯 AIP Ready")
+  logger.info("✅ MarketingEngine initialized")
+  logger.info("✅ VisitPipeline initialized")
+  logger.info("🧠 System Nervous Core Ready")
 
   return {
     db,

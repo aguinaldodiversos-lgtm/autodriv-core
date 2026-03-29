@@ -85,7 +85,7 @@ export class EventBus {
 
     if (!execution.success) {
       logger.error(
-        `❌ Event not marked as processed because ${execution.failedHandlers.length} handler(s) failed (${execution.failedHandlers.join(", ")}) for event: ${event.id}`
+        `❌ Failed handlers prevented event processing: ${execution.failedHandlers.join(", ")} | Event: ${event.id}`
       )
       return
     }

@@ -8,9 +8,8 @@ const transport =
             target: "pino-pretty"
           })
         } catch (error) {
-          console.warn(
-            "pino-pretty is unavailable; falling back to the default logger transport.",
-            error
+          process.stderr.write(
+            `pino-pretty is unavailable; falling back to the default logger transport. ${String(error)}\n`
           )
           return undefined
         }

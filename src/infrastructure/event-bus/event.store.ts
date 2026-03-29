@@ -38,7 +38,13 @@ export class EventStore {
    */
   async replayByTenant(tenantId: string): Promise<DomainEvent[]> {
 
-    const result = await this.db.query({
+    const rows = await this.db.query<{
+      id: string
+      event_name: DomainEvent["name"]
+      tenant_id: string
+      payload: DomainEvent["payload"]
+      occurred_at: Date
+    }>({
       text: `
         SELECT *
         FROM event_store
@@ -48,7 +54,7 @@ export class EventStore {
       params: [tenantId]
     })
 
-    return result.rows.map(row => ({
+    return rows.map(row => ({
       id: row.id,
       name: row.event_name,
       tenantId: row.tenant_id,
@@ -62,7 +68,13 @@ export class EventStore {
    */
   async replayAll(): Promise<DomainEvent[]> {
 
-    const result = await this.db.query({
+    const rows = await this.db.query<{
+      id: string
+      event_name: DomainEvent["name"]
+      tenant_id: string
+      payload: DomainEvent["payload"]
+      occurred_at: Date
+    }>({
       text: `
         SELECT *
         FROM event_store
@@ -70,7 +82,7 @@ export class EventStore {
       `
     })
 
-    return result.rows.map(row => ({
+    return rows.map(row => ({
       id: row.id,
       name: row.event_name,
       tenantId: row.tenant_id,
@@ -84,7 +96,7 @@ export class EventStore {
    */
   async isProcessed(eventId: string): Promise<boolean> {
 
-    const result = await this.db.query({
+    const rows = await this.db.query({
       text: `
         SELECT 1
         FROM processed_events
@@ -94,7 +106,7 @@ export class EventStore {
       params: [eventId]
     })
 
-    return result.rowCount > 0
+    return rows.length > 0
   }
 
   /**

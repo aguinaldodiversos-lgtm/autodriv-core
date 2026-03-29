@@ -80,7 +80,15 @@ export class EventBus {
     /**
      * 3️⃣ Executar handlers
      */
-    await this.executeHandlersOnly(event)
+    const execution =
+      await this.executeHandlersOnly(event)
+
+    if (!execution.success) {
+      logger.error(
+        `❌ Failed handlers prevented event processing: ${execution.failedHandlers.join(", ")} | Event: ${event.id}`
+      )
+      return
+    }
 
     /**
      * 4️⃣ Marcar como processado
@@ -116,7 +124,14 @@ export class EventBus {
       `🔁 Replaying event: ${event.name} | ${event.id}`
     )
 
-    await this.executeHandlersOnly(event)
+    const execution =
+      await this.executeHandlersOnly(event)
+
+    if (!execution.success) {
+      logger.warn(
+        `⚠️ Replay finished with handler failures for event: ${event.id}`
+      )
+    }
   }
 
   /**
@@ -124,7 +139,10 @@ export class EventBus {
    */
   private async executeHandlersOnly<T = any>(
     event: DomainEvent<T>
-  ): Promise<void> {
+  ): Promise<{
+    success: boolean
+    failedHandlers: string[]
+  }> {
 
     const matchingHandlers =
       this.handlers.filter(handler =>
@@ -138,8 +156,13 @@ export class EventBus {
         `⚠️ No handlers found for event: ${event.name}`
       )
 
-      return
+      return {
+        success: true,
+        failedHandlers: []
+      }
     }
+
+    const failedHandlers: string[] = []
 
     await Promise.all(
       matchingHandlers.map(handler =>
@@ -158,6 +181,9 @@ export class EventBus {
             )
 
           } catch (error) {
+            failedHandlers.push(
+              handler.constructor.name
+            )
 
             logger.error(
               `❌ Handler error: ${handler.constructor.name}`,
@@ -167,6 +193,11 @@ export class EventBus {
         })
       )
     )
+
+    return {
+      success: failedHandlers.length === 0,
+      failedHandlers
+    }
   }
 
   /**

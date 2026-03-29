@@ -7,9 +7,10 @@ const transport =
           return pino.transport({
             target: "pino-pretty"
           })
-        } catch {
+        } catch (error) {
           console.warn(
-            "pino-pretty is unavailable; falling back to the default logger transport."
+            "pino-pretty is unavailable; falling back to the default logger transport.",
+            error
           )
           return undefined
         }

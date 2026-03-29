@@ -8,6 +8,9 @@ const transport =
             target: "pino-pretty"
           })
         } catch {
+          console.warn(
+            "pino-pretty is unavailable; falling back to the default logger transport."
+          )
           return undefined
         }
       })()

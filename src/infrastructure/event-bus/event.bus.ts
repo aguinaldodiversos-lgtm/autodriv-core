@@ -181,7 +181,6 @@ export class EventBus {
             )
 
           } catch (error) {
-
             failedHandlers.push(
               handler.constructor.name
             )

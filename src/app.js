@@ -2,17 +2,61 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 
 const localAI = require("./infrastructure/ai/localAI.service");
 
 const app = express();
 
+// express roda atrás do Cloudflare; confiar em X-Forwarded-For para rate-limit por IP
+app.set("trust proxy", 1);
+
 /* =========================
-   MIDDLEWARES
+   MIDDLEWARES DE SEGURANÇA
 ========================= */
-app.use(cors());
+app.use(helmet());
+
+const corsOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+if (corsOrigins.length === 0) {
+  console.warn(
+    "[CORS] Nenhum CORS_ORIGINS configurado. Somente requisições de mesma origem serão aceitas."
+  );
+}
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      // same-origin (sem Origin header) e server-to-server são permitidos
+      if (!origin) return cb(null, true);
+      return cb(null, corsOrigins.includes(origin));
+    },
+    credentials: true
+  })
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+/* =========================
+   RATE LIMITERS
+========================= */
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) =>
+    `${req.ip}:${(req.body && req.body.email ? req.body.email : "").toLowerCase()}`,
+  message: {
+    error:
+      "Muitas tentativas. Aguarde 15 minutos antes de tentar novamente."
+  }
+});
 
 /* =========================
    INICIALIZAÇÃO SEGURA DA IA LOCAL
@@ -71,6 +115,9 @@ app.get("/", (req, res) => {
 /* =========================
    REGISTRO DAS ROTAS
 ========================= */
+// Rate limit só nos endpoints sensíveis de autenticação
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/vehicles", vehiclesRoutes);
 app.use("/api/leads", leadsRoutes);

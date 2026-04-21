@@ -3,7 +3,6 @@ require("dotenv").config();
 const runMigrations = require("./database/migrate");
 const app = require("./app");
 const { startWhatsApp } = require("./modules/whatsapp_baileys/whatsapp.baileys");
-app.use("/contracts", require("./modules/contracts/contract.routes"));
 const PORT = process.env.PORT || 10000;
 
 async function start() {

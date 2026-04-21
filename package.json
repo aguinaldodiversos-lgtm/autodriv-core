@@ -1,42 +1,35 @@
 {
-  "name": "aip-core",
-  "version": "2.0.0",
-  "description": "AIP - Automotive Intelligence Platform (Unified, Event-Driven, Revenue Core)",
-  "main": "dist/app/server.js",
-  "type": "module",
+  "name": "autodriv-core",
+  "version": "2.1.0",
+  "description": "Autodriv CRM backend (Node + Express + Postgres).",
+  "main": "src/server.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/app/server.ts",
-    "build": "tsc",
-    "start": "node dist/app/server.js",
-    "worker": "node dist/workers/event.worker.js",
-    "dev:worker": "ts-node-dev --respawn --transpile-only src/workers/event.worker.ts"
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "worker": "node src/workers/index.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "axios": "^1.6.8",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
+    "csv-parse": "^6.2.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^8.3.2",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.1.1",
+    "multer-storage-cloudinary": "^4.0.0",
     "openai": "^4.57.0",
     "p-queue": "^7.3.0",
     "pg": "^8.11.5",
     "pino": "^9.0.0",
+    "puppeteer": "^24.42.0",
     "uuid": "^9.0.1"
-  },
-  "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/jsonwebtoken": "^9.0.6",
-    "@types/node": "^20.12.7",
-    "@types/pg": "^8.11.5",
-    "@types/uuid": "^9.0.8",
-    "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.4.5"
   }
 }

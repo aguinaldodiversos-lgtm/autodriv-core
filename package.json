@@ -1,5 +1,4 @@
 {
- {
   "name": "aip-core",
   "version": "2.0.0",
   "description": "AIP - Automotive Intelligence Platform",
@@ -22,7 +21,7 @@
     "openai": "^4.57.0",
     "pg": "^8.11.5",
     "pino": "^9.0.0",
-    "uuid": "^9.0.1
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

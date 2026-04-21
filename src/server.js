@@ -1,5 +1,13 @@
 require("dotenv").config();
 
+// Fail-fast: segredos obrigatórios precisam existir antes de qualquer outra coisa
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+  console.error(
+    "❌ JWT_SECRET inválido: defina JWT_SECRET com no mínimo 32 caracteres."
+  );
+  process.exit(1);
+}
+
 const runMigrations = require("./database/migrate");
 const app = require("./app");
 const { startWhatsApp } = require("./modules/whatsapp_baileys/whatsapp.baileys");

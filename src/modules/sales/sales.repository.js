@@ -40,10 +40,13 @@ async function updateApprovalStatus(saleId, status, userId, notes) {
   return update.rows[0];
 }
 
-async function getSaleById(saleId) {
+async function getSaleById(saleId, dealershipId) {
+  if (!dealershipId) {
+    throw new Error("getSaleById: dealershipId é obrigatório");
+  }
   const result = await pool.query(
-    `SELECT * FROM sales WHERE id = $1`,
-    [saleId]
+    `SELECT * FROM sales WHERE id = $1 AND dealership_id = $2`,
+    [saleId, dealershipId]
   );
 
   return result.rows[0];

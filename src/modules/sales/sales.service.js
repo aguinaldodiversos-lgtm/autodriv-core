@@ -5,7 +5,7 @@ async function createDraftSale(data) {
 }
 
 async function submitForApproval(saleId, user) {
-  const sale = await repository.getSaleById(saleId);
+  const sale = await repository.getSaleById(saleId, user.dealership_id);
 
   if (!sale) throw new Error("Venda não encontrada");
 
@@ -22,7 +22,7 @@ async function submitForApproval(saleId, user) {
 }
 
 async function approveSale(saleId, user) {
-  const sale = await repository.getSaleById(saleId);
+  const sale = await repository.getSaleById(saleId, user.dealership_id);
 
   if (!sale) throw new Error("Venda não encontrada");
 
@@ -39,7 +39,7 @@ async function approveSale(saleId, user) {
 }
 
 async function rejectSale(saleId, user, reason) {
-  const sale = await repository.getSaleById(saleId);
+  const sale = await repository.getSaleById(saleId, user.dealership_id);
 
   if (!sale) throw new Error("Venda não encontrada");
 

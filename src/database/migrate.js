@@ -14,7 +14,7 @@ const migrations = [
   require("./migrations/010_maintenance"),
   require("./migrations/011_ads"),
   require("./migrations/012_public_slug"),
-  require("./migrations/013_vehicle_images"),
+  require("./migrations/013_vehicle_images_update"),
   require("./migrations/014_vehicle_seo"),
   require("./migrations/015_integrations"),
   require("./migrations/016_ai_seller"),
@@ -23,21 +23,32 @@ const migrations = [
   require("./migrations/019_fix_subscription_plan"),
   require("./migrations/020_normalize_subscriptions"),
   require("./migrations/023_vehicle_entry_date"),
-
 ];
 
 async function runMigrations() {
   const client = await pool.connect();
 
   try {
+    console.log(`[migrations] Iniciando execução de ${migrations.length} migrations...`);
+
     for (const migration of migrations) {
-      console.log(`Rodando migration: ${migration.name}`);
+      if (!migration || typeof migration.up !== "function") {
+        throw new Error(
+          `[migrations] Migration inválida detectada: ${migration?.name || "sem nome"}`
+        );
+      }
+
+      const migrationName = migration.name || "migration_sem_nome";
+      console.log(`[migrations] Rodando: ${migrationName}`);
+
       await migration.up(client);
+
+      console.log(`[migrations] Concluída: ${migrationName}`);
     }
 
-    console.log("Migrations concluídas.");
+    console.log("[migrations] Todas as migrations foram concluídas com sucesso.");
   } catch (err) {
-    console.error("Erro nas migrations:", err);
+    console.error("[migrations] Erro durante a execução:", err);
     throw err;
   } finally {
     client.release();

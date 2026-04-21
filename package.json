@@ -1,18 +1,16 @@
 {
   "name": "aip-core",
   "version": "2.0.0",
-  "description": "AIP - Automotive Intelligence Platform (Unified, Event-Driven, Revenue Core)",
-  "main": "dist/app/server.js",
-  "type": "module",
+  "description": "AIP - Automotive Intelligence Platform",
+  "main": "src/server.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/app/server.ts",
-    "build": "tsc",
-    "start": "node dist/app/server.js",
-    "worker": "node dist/workers/event.worker.js",
-    "dev:worker": "ts-node-dev --respawn --transpile-only src/workers/event.worker.ts"
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "ts:dev": "ts-node-dev --respawn --transpile-only src/app/server.ts",
+    "ts:build": "tsc"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20 <21"
   },
   "dependencies": {
     "axios": "^1.6.8",
@@ -21,7 +19,6 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "openai": "^4.57.0",
-    "p-queue": "^7.3.0",
     "pg": "^8.11.5",
     "pino": "^9.0.0",
     "uuid": "^9.0.1"

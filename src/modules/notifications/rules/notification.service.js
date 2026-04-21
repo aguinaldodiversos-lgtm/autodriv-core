@@ -1,6 +1,6 @@
-const staleRule = require("./rules/staleLead.rule");
-const hotRule = require("./rules/hotLead.rule");
-const visitRule = require("./rules/visitReminder.rule");
+const staleRule = require("./staleLead.rule");
+const hotRule = require("./hotLead.rule");
+const visitRule = require("./visitReminder.rule");
 
 async function generateNotifications(dealershipId) {
 

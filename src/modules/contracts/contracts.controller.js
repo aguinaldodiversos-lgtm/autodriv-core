@@ -54,5 +54,8 @@ async function generate(req, res) {
 }
 
 module.exports = {
+  sendForApproval,
+  approve,
+  reject,
   generate
 };

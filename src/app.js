@@ -3,7 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
+const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 
 const localAI = require("./infrastructure/ai/localAI.service");
 
@@ -50,8 +50,8 @@ const authLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) =>
-    `${req.ip}:${(req.body && req.body.email ? req.body.email : "").toLowerCase()}`,
+  keyGenerator: (req, res) =>
+    `${ipKeyGenerator(req, res)}:${(req.body && req.body.email ? req.body.email : "").toLowerCase()}`,
   message: {
     error:
       "Muitas tentativas. Aguarde 15 minutos antes de tentar novamente."
@@ -77,7 +77,7 @@ initializeLocalAI();
 /* =========================
    ROTAS
 ========================= */
-const authRoutes = require("./routes/auth");
+const authRoutes = require("./modules/auth/auth.routes");
 const vehiclesRoutes = require("./modules/vehicles/vehicles.routes");
 const leadsRoutes = require("./modules/leads/leads.routes");
 const dashboardRoutes = require("./modules/dashboard/dashboard.routes");
@@ -90,7 +90,7 @@ const inboxRoutes = require("./modules/inbox/inbox.routes");
 const leadDistributionRoutes = require("./modules/lead_distribution/distribution.routes");
 const forecastRoutes = require("./modules/analytics/forecast.routes");
 const dashboardIntelligenceRoutes = require("./modules/dashboard_intelligence/dashboard.routes");
-const notificationRoutes = require("./modules/notifications/notification.routes");
+const notificationRoutes = require("./modules/notifications/rules/notification.routes");
 const goalRoutes = require("./modules/goals/goal.routes");
 const funnelRoutes = require("./modules/funnel_analysis/funnel.routes");
 const rankingRoutes = require("./modules/seller_ranking/ranking.routes");

@@ -1,6 +1,14 @@
 // src/modules/contracts/contract.generator.js
 
-const puppeteer = require("puppeteer");
+// Lazy-require puppeteer: evita que o boot-path carregue o Chromium (~280MB)
+// e quebre o deploy no Render quando o pacote não estiver instalado.
+// Só é resolvido quando generatePDF() é efetivamente chamado.
+let puppeteer;
+function getPuppeteer() {
+  if (!puppeteer) puppeteer = require("puppeteer");
+  return puppeteer;
+}
+
 const fs = require("fs").promises;
 const path = require("path");
 const crypto = require("crypto");
@@ -40,7 +48,7 @@ async function generatePDF({ templateName, data, outputPath }) {
 
   await ensureDir(path.dirname(outputPath));
 
-  const browser = await puppeteer.launch({
+  const browser = await getPuppeteer().launch({
     headless: "new",
     args: ["--no-sandbox", "--disable-setuid-sandbox"]
   });

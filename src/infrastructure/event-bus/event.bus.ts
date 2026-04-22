@@ -69,10 +69,7 @@ export class EventBus {
 
     } catch (error) {
 
-      logger.error(
-        `❌ Failed to persist event: ${event.name}`,
-        error
-      )
+      logger.error({ err: error }, `❌ Failed to persist event: ${event.name}`)
 
       return
     }
@@ -89,16 +86,11 @@ export class EventBus {
 
       await this.eventStore.markProcessed(event.id)
 
-      logger.info(
-        `✔ Event marked as processed: ${event.id}`
-      )
+      logger.info(`✔ Event marked as processed: ${event.id}`)
 
     } catch (error) {
 
-      logger.error(
-        `❌ Failed to mark event as processed: ${event.id}`,
-        error
-      )
+      logger.error({ err: error }, `❌ Failed to mark event as processed: ${event.id}`)
     }
   }
 
@@ -159,10 +151,7 @@ export class EventBus {
 
           } catch (error) {
 
-            logger.error(
-              `❌ Handler error: ${handler.constructor.name}`,
-              error
-            )
+            logger.error({ err: error }, `❌ Handler error: ${handler.constructor.name}`)
           }
         })
       )

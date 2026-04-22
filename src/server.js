@@ -2,42 +2,72 @@ require("dotenv").config();
 
 const runMigrations = require("./database/migrate");
 const app = require("./app");
-const { startWhatsApp } = require("./modules/whatsapp_baileys/whatsapp.baileys");
-const PORT = process.env.PORT || 10000;
+const logger = require("./infrastructure/logger/logger");
+const {
+  startWhatsApp
+} = require("./modules/whatsapp_baileys/whatsapp.baileys");
+
+const PORT = Number(process.env.PORT) || 10000;
+
+/**
+ * Scheduler pragmático via setInterval. Só liga se ENABLE_WORKERS=true.
+ * O seletor explícito evita a "feature fantasma" em que o produto prometia
+ * follow-ups automáticos mas nada era disparado.
+ */
+function startWorkersIfEnabled() {
+  if (process.env.ENABLE_WORKERS !== "true") {
+    logger.info("workers disabled (ENABLE_WORKERS != 'true')");
+    return;
+  }
+
+  const intervalMs = Number(process.env.FOLLOWUP_INTERVAL_MS) || 15 * 60 * 1000;
+  const { runFollowUp } = require("./workers/followup.worker");
+
+  logger.info({ intervalMs }, "followup worker enabled");
+
+  const tick = async () => {
+    try {
+      await runFollowUp();
+    } catch (err) {
+      logger.error({ err }, "followup worker tick failed");
+    }
+  };
+
+  // Primeiro disparo após boot + recorrência.
+  setTimeout(tick, 30_000);
+  setInterval(tick, intervalMs);
+}
 
 async function start() {
   try {
-    console.log("🧱 Rodando migrations...");
+    logger.info("running migrations...");
     await runMigrations();
-    console.log("✅ Migrations concluídas");
+    logger.info("migrations done");
 
     app.listen(PORT, async () => {
-      console.log("=================================");
-      console.log(`🚀 Servidor rodando na porta ${PORT}`);
-      console.log("=================================");
+      logger.info({ port: PORT }, "server listening");
 
       try {
-        console.log("📱 Iniciando conexão com WhatsApp...");
+        logger.info("starting whatsapp...");
         await startWhatsApp();
       } catch (err) {
-        console.error("❌ Erro ao iniciar WhatsApp:", err);
+        logger.error({ err }, "whatsapp startup failed");
       }
+
+      startWorkersIfEnabled();
     });
   } catch (err) {
-    console.error("❌ Erro ao iniciar servidor:", err);
+    logger.error({ err }, "server startup failed");
     process.exit(1);
   }
 }
 
 start();
 
-/* =========================
-   TRATAMENTO DE ERROS GLOBAIS
-========================= */
 process.on("unhandledRejection", (err) => {
-  console.error("Erro não tratado (Promise):", err);
+  logger.error({ err }, "unhandledRejection");
 });
 
 process.on("uncaughtException", (err) => {
-  console.error("Exceção não capturada:", err);
+  logger.error({ err }, "uncaughtException");
 });

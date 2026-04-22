@@ -1,25 +1,16 @@
-// src/workers/daily-alert.worker.js
-
-const ExecutiveReport = require('../brain/executive-report.engine')
-const db = require('../config/db')
-
+// DESATIVADO — depende de `brain/executive-report.engine` que é um arquivo
+// TypeScript não compilado pelo projeto. Manter o require quebraria o boot.
+// Quando essa engine for portada para JavaScript (ou o projeto adotar build
+// de TS), reativar o scheduler em server.js.
+//
+// Formato preservado para não quebrar imports acidentais.
 async function runDailyAlerts() {
-  const tenants = await db.query('SELECT id FROM dealerships')
-
-  for (const t of tenants.rows) {
-    const reportEngine = new ExecutiveReport()
-    const report = await reportEngine.generate(t.id)
-
-    if (report.resumo.diasMediosEstoque > 60) {
-      console.log(`🚨 ALERTA: Estoque alto na loja ${t.id}`)
-    }
-
-    const piorCanal = report.canais.sort((a, b) => a.roi - b.roi)[0]
-
-    if (piorCanal && piorCanal.roi < 0) {
-      console.log(`🚨 ALERTA: Canal ${piorCanal.source} está queimando dinheiro`)
-    }
-  }
+  const logger = require("../infrastructure/logger/logger");
+  logger.warn(
+    "daily-alert.worker está desativado: executive-report.engine não é executável em runtime JS"
+  );
 }
 
-module.exports = runDailyAlerts
+module.exports = runDailyAlerts;
+module.exports.runDailyAlerts = runDailyAlerts;
+module.exports.DISABLED = true;

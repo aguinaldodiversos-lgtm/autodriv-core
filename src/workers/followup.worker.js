@@ -1,5 +1,5 @@
 const pool = require("../config/db");
-const convoRepo = require("../modules/lead_conversations/leadConversations.repository");
+const logger = require("../infrastructure/logger/logger");
 
 function getFollowUpMessage(step) {
   const messages = {
@@ -12,12 +12,11 @@ function getFollowUpMessage(step) {
     7: "Oi! Só passando para saber se você ainda está procurando carro. Posso separar algumas opções no seu perfil para você ver aqui na loja.",
     8: "Olá! Ainda está pensando em trocar de carro? Chegaram algumas opções bem interessantes aqui na loja. Se quiser, passa aqui pra ver com calma e tomar um café com a gente."
   };
-
   return messages[step] || null;
 }
 
 async function runFollowUp() {
-  console.log("🔁 Rodando follow-up automático...");
+  logger.info("followup worker tick");
 
   const leads = await pool.query(`
     SELECT
@@ -39,8 +38,7 @@ async function runFollowUp() {
     const diffHours = (now - lastMsg) / (1000 * 60 * 60);
 
     let nextStep = null;
-
-    if (lead.followup_step === 0 && diffHours >= 0.3) nextStep = 1; // 20 min
+    if (lead.followup_step === 0 && diffHours >= 0.3) nextStep = 1;
     else if (lead.followup_step === 1 && diffHours >= 3) nextStep = 2;
     else if (lead.followup_step === 2 && diffHours >= 24) nextStep = 3;
     else if (lead.followup_step === 3 && diffHours >= 72) nextStep = 4;
@@ -54,25 +52,33 @@ async function runFollowUp() {
     const message = getFollowUpMessage(nextStep);
     if (!message) continue;
 
-    await convoRepo.addMessage({
-      dealership_id: lead.dealership_id,
-      lead_id: lead.lead_id,
-      role: "ai",
-      message
-    });
+    try {
+      await pool.query(
+        `INSERT INTO lead_conversations
+         (dealership_id, lead_id, sender, message)
+         VALUES ($1, $2, 'ai', $3)`,
+        [lead.dealership_id, lead.lead_id, message]
+      );
 
-    await pool.query(
-      `UPDATE lead_ai_state
-       SET followup_step = $2,
-           updated_at = NOW()
-       WHERE lead_id = $1`,
-      [lead.lead_id, nextStep]
-    );
+      await pool.query(
+        `UPDATE lead_ai_state
+         SET followup_step = $2,
+             updated_at = NOW()
+         WHERE lead_id = $1`,
+        [lead.lead_id, nextStep]
+      );
 
-    console.log(`📩 Follow-up step ${nextStep} enviado para lead ${lead.lead_id}`);
+      logger.info(
+        { lead_id: lead.lead_id, step: nextStep },
+        "followup dispatched"
+      );
+    } catch (err) {
+      logger.error(
+        { err, lead_id: lead.lead_id },
+        "followup dispatch failed"
+      );
+    }
   }
 }
 
-module.exports = {
-  runFollowUp
-};
+module.exports = { runFollowUp };

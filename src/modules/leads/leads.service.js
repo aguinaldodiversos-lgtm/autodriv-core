@@ -63,10 +63,14 @@ async function createLead(data, user, source = "manual") {
 }
 
 /* =========================================
-   LISTAR LEADS DA LOJA
+   LISTAR LEADS DA LOJA (paginado)
 ========================================= */
-async function listLeads(user) {
-  return await repository.findAll(user.dealership_id);
+async function listLeads(user, { limit = 50, offset = 0 } = {}) {
+  const [items, total] = await Promise.all([
+    repository.findAll(user.dealership_id, { limit, offset }),
+    repository.countAll(user.dealership_id)
+  ]);
+  return { items, total, limit, offset };
 }
 
 /* =========================================

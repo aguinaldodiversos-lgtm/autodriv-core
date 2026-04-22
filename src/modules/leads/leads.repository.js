@@ -36,18 +36,29 @@ async function create(lead) {
 }
 
 /* =========================
-   LISTAR LEADS
+   LISTAR LEADS (paginado)
 ========================= */
-async function findAll(dealershipId) {
+async function findAll(dealershipId, { limit = 50, offset = 0 } = {}) {
   const result = await pool.query(
     `SELECT *
      FROM leads
      WHERE dealership_id = $1
-     ORDER BY created_at DESC`,
-    [dealershipId]
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [dealershipId, limit, offset]
   );
 
   return result.rows;
+}
+
+async function countAll(dealershipId) {
+  const result = await pool.query(
+    `SELECT COUNT(*)::int AS total
+     FROM leads
+     WHERE dealership_id = $1`,
+    [dealershipId]
+  );
+  return result.rows[0].total;
 }
 
 /* =========================
@@ -102,6 +113,7 @@ async function remove(id, dealershipId) {
 module.exports = {
   create,
   findAll,
+  countAll,
   update,
   remove
 };

@@ -1,11 +1,14 @@
 require("dotenv").config();
 
+const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 
 const { CORS_ORIGINS, NODE_ENV } = require("./config/env");
+const pool = require("./config/db");
+const logger = require("./infrastructure/logger/logger");
 const localAI = require("./infrastructure/ai/localAI.service");
 
 const app = express();
@@ -17,7 +20,7 @@ app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(helmet());
 
-/* CORS com allowlist explícita. Lista vazia só é aceita em dev. */
+/* CORS allowlist */
 const corsOptions = {
   origin(origin, callback) {
     if (!origin) return callback(null, true);
@@ -37,6 +40,31 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 /* =========================
+   REQUEST ID + LOG
+========================= */
+app.use((req, res, next) => {
+  req.id =
+    req.headers["x-request-id"] ||
+    crypto.randomBytes(8).toString("hex");
+  res.setHeader("x-request-id", req.id);
+  req.log = logger.child({ req_id: req.id });
+  const start = Date.now();
+  res.on("finish", () => {
+    const duration_ms = Date.now() - start;
+    req.log.info(
+      {
+        method: req.method,
+        path: req.originalUrl,
+        status: res.statusCode,
+        duration_ms
+      },
+      "http_request"
+    );
+  });
+  next();
+});
+
+/* =========================
    RATE LIMIT EM AUTH
 ========================= */
 const authLimiter = rateLimit({
@@ -53,14 +81,39 @@ const authLimiter = rateLimit({
 async function initializeLocalAI() {
   try {
     await localAI.init();
-    console.log("🧠 IA Local inicializada com sucesso");
+    logger.info("IA local inicializada");
   } catch (error) {
-    console.error("⚠️ IA Local desabilitada:", error.message);
-    // NÃO derruba o sistema
+    logger.warn({ err: error }, "IA local desabilitada");
   }
 }
-
 initializeLocalAI();
+
+/* =========================
+   HEALTHCHECKS
+========================= */
+app.get("/", (req, res) => {
+  res.json({ status: "ok", service: "autodriv-core" });
+});
+
+app.get("/health", async (req, res) => {
+  const checks = {
+    api: "ok",
+    db: "unknown",
+    uptime_s: Math.round(process.uptime())
+  };
+  let status = 200;
+
+  try {
+    await pool.query("SELECT 1");
+    checks.db = "ok";
+  } catch (err) {
+    checks.db = "error";
+    checks.db_error = err.message;
+    status = 503;
+  }
+
+  res.status(status).json(checks);
+});
 
 /* =========================
    ROTAS
@@ -89,20 +142,6 @@ const contractRoutes = require("./modules/contracts/contracts.routes");
 const approvalPanelRoutes = require("./modules/sales_approval_panel/approvalPanel.routes");
 const approvalDashboardRoutes = require("./modules/approval_dashboard/approvalDashboard.routes");
 
-/* =========================
-   ENDPOINT DE SAÚDE
-========================= */
-app.get("/", (req, res) => {
-  res.json({
-    status: "ok",
-    service: "autodriv-core",
-    localAI: localAI ? "initialized_or_attempted" : "not_loaded"
-  });
-});
-
-/* =========================
-   REGISTRO DAS ROTAS
-========================= */
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/vehicles", vehiclesRoutes);
 app.use("/api/leads", leadsRoutes);
@@ -134,10 +173,8 @@ app.use((err, req, res, next) => {
   if (err && err.message && err.message.startsWith("CORS bloqueado")) {
     return res.status(403).json({ error: "cors_blocked" });
   }
-  console.error("Erro global:", err);
-  res.status(500).json({
-    error: "Erro interno do servidor"
-  });
+  (req.log || logger).error({ err }, "unhandled_error");
+  res.status(500).json({ error: "internal_error" });
 });
 
 module.exports = app;

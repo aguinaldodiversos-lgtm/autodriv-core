@@ -2,24 +2,41 @@ const pool = require("../../config/db");
 const {
   applySuggestion
 } = require("./applySuggestion.service");
+const { parsePagination } = require("../../utils/pagination");
+const logger = require("../../infrastructure/logger/logger");
 
 /* =========================
-   LISTAR VEÍCULOS
+   LISTAR VEÍCULOS (paginado)
 ========================= */
 async function getVehicles(req, res) {
   try {
     const dealershipId = req.user.dealership_id;
+    const { limit, offset } = parsePagination(req);
 
-    const result = await pool.query(
-      `SELECT * FROM vehicles
-       WHERE dealership_id = $1
-       ORDER BY created_at DESC`,
-      [dealershipId]
-    );
+    const [rows, count] = await Promise.all([
+      pool.query(
+        `SELECT * FROM vehicles
+         WHERE dealership_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [dealershipId, limit, offset]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS total
+         FROM vehicles
+         WHERE dealership_id = $1`,
+        [dealershipId]
+      )
+    ]);
 
-    res.json(result.rows);
+    res.json({
+      items: rows.rows,
+      limit,
+      offset,
+      total: count.rows[0].total
+    });
   } catch (err) {
-    console.error("Erro ao listar veículos:", err);
+    logger.error({ err, dealership_id: req.user?.dealership_id }, "listar veículos falhou");
     res.status(500).json({ error: "Erro ao listar veículos" });
   }
 }

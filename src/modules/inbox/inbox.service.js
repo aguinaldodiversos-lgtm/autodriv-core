@@ -1,28 +1,42 @@
 const pool = require("../../config/db");
 
-async function listConversations(user) {
-  const result = await pool.query(
-    `
-    SELECT
-      l.id AS lead_id,
-      l.client_name AS name,
-      l.client_phone AS phone,
-      l.status,
-      MAX(c.created_at) AS last_message_at
-    FROM leads l
-    LEFT JOIN lead_conversations c
-      ON c.lead_id = l.id
-    WHERE l.dealership_id = $1
-    GROUP BY l.id
-    ORDER BY last_message_at DESC NULLS LAST
-    `,
-    [user.dealership_id]
-  );
+async function listConversations(user, { limit = 50, offset = 0 } = {}) {
+  const [rows, count] = await Promise.all([
+    pool.query(
+      `
+      SELECT
+        l.id AS lead_id,
+        l.client_name AS name,
+        l.client_phone AS phone,
+        l.status,
+        MAX(c.created_at) AS last_message_at
+      FROM leads l
+      LEFT JOIN lead_conversations c
+        ON c.lead_id = l.id
+      WHERE l.dealership_id = $1
+      GROUP BY l.id
+      ORDER BY last_message_at DESC NULLS LAST
+      LIMIT $2 OFFSET $3
+      `,
+      [user.dealership_id, limit, offset]
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM leads
+       WHERE dealership_id = $1`,
+      [user.dealership_id]
+    )
+  ]);
 
-  return result.rows;
+  return {
+    items: rows.rows,
+    limit,
+    offset,
+    total: count.rows[0].total
+  };
 }
 
-async function getConversation(user, leadId) {
+async function getConversation(user, leadId, { limit = 200, offset = 0 } = {}) {
   const result = await pool.query(
     `
     SELECT
@@ -34,8 +48,9 @@ async function getConversation(user, leadId) {
     WHERE lead_id = $1
       AND dealership_id = $2
     ORDER BY created_at ASC
+    LIMIT $3 OFFSET $4
     `,
-    [leadId, user.dealership_id]
+    [leadId, user.dealership_id, limit, offset]
   );
 
   return result.rows;

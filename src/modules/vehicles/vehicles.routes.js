@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 
-const auth = require("../../middlewares/auth");
+const auth = require("../../middlewares/auth.middleware");
+const checkPlanLimit = require("../../middlewares/plan.middleware");
 
 const controller = require("./vehicles.controller");
 
@@ -13,7 +14,7 @@ router.get("/", auth, controller.getVehicles);
 
 router.get("/:id", auth, controller.getVehicleById);
 
-router.post("/", auth, controller.createVehicle);
+router.post("/", auth, checkPlanLimit("vehicles"), controller.createVehicle);
 
 router.put("/:id", auth, controller.updateVehicle);
 

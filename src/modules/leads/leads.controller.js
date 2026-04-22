@@ -1,4 +1,5 @@
 const service = require("./leads.service");
+const { parsePagination } = require("../../utils/pagination");
 
 /* =========================
    CRIAR LEAD
@@ -17,8 +18,9 @@ async function create(req, res) {
 ========================= */
 async function list(req, res) {
   try {
-    const leads = await service.listLeads(req.user);
-    res.json(leads);
+    const page = parsePagination(req);
+    const result = await service.listLeads(req.user, page);
+    res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

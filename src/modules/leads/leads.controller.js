@@ -1,5 +1,4 @@
 const service = require("./leads.service");
-const scoreService = require("./leadScore.service");
 
 /* =========================
    CRIAR LEAD
@@ -73,7 +72,7 @@ async function reactivate(req, res) {
 ========================= */
 async function getScore(req, res) {
   try {
-    const result = await scoreService.getLeadScore(req.params.id);
+    const result = await service.getLeadScore(req.params.id, req.user);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });

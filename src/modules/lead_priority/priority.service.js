@@ -1,13 +1,18 @@
 const pool = require("../../config/db");
 
-async function calculatePriority(leadId) {
+async function calculatePriority(leadId, dealershipId) {
+  if (dealershipId === undefined || dealershipId === null) {
+    throw new Error("dealership_id obrigatório em calculatePriority");
+  }
+
   const leadResult = await pool.query(
     `SELECT l.*, s.stage
      FROM leads l
      LEFT JOIN lead_ai_state s
        ON s.lead_id = l.id
-     WHERE l.id = $1`,
-    [leadId]
+     WHERE l.id = $1
+       AND l.dealership_id = $2`,
+    [leadId, dealershipId]
   );
 
   if (!leadResult.rows.length) return;
@@ -16,22 +21,19 @@ async function calculatePriority(leadId) {
 
   let priority = 0;
 
-  // Score base
   priority += lead.score || 0;
 
-  // Se estágio avançado
   if (lead.stage === "ready_for_visit") priority += 30;
   if (lead.stage === "visit_scheduled") priority += 50;
 
-  // Se cliente falou sobre financiamento
   if (lead.payment_type === "financing") priority += 15;
 
-  // Se houve resposta nas últimas 24h
   const recent = await pool.query(
     `SELECT COUNT(*) FROM lead_conversations
      WHERE lead_id = $1
-     AND created_at > NOW() - INTERVAL '24 hours'`,
-    [leadId]
+       AND dealership_id = $2
+       AND created_at > NOW() - INTERVAL '24 hours'`,
+    [leadId, dealershipId]
   );
 
   if (parseInt(recent.rows[0].count) > 0) {
@@ -40,9 +42,10 @@ async function calculatePriority(leadId) {
 
   await pool.query(
     `UPDATE leads
-     SET priority_score = $2
-     WHERE id = $1`,
-    [leadId, priority]
+     SET priority_score = $3
+     WHERE id = $1
+       AND dealership_id = $2`,
+    [leadId, dealershipId, priority]
   );
 
   return priority;

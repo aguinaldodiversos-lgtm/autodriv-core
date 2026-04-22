@@ -5,8 +5,8 @@ async function listConversations(user) {
     `
     SELECT
       l.id AS lead_id,
-      l.name,
-      l.phone,
+      l.client_name AS name,
+      l.client_phone AS phone,
       l.status,
       MAX(c.created_at) AS last_message_at
     FROM leads l
@@ -16,7 +16,7 @@ async function listConversations(user) {
     GROUP BY l.id
     ORDER BY last_message_at DESC NULLS LAST
     `,
-    [user.dealershipId]
+    [user.dealership_id]
   );
 
   return result.rows;
@@ -27,14 +27,15 @@ async function getConversation(user, leadId) {
     `
     SELECT
       id,
-      role,
+      sender,
       message,
       created_at
     FROM lead_conversations
     WHERE lead_id = $1
+      AND dealership_id = $2
     ORDER BY created_at ASC
     `,
-    [leadId]
+    [leadId, user.dealership_id]
   );
 
   return result.rows;
@@ -42,25 +43,22 @@ async function getConversation(user, leadId) {
 
 async function sendHumanMessage(user, leadId, message) {
   const leadResult = await pool.query(
-    `SELECT * FROM leads
+    `SELECT id FROM leads
      WHERE id = $1 AND dealership_id = $2`,
-    [leadId, user.dealershipId]
+    [leadId, user.dealership_id]
   );
 
   const lead = leadResult.rows[0];
   if (!lead) throw new Error("Lead não encontrado");
 
-  /* salva mensagem */
   await pool.query(
     `INSERT INTO lead_conversations
-     (dealership_id, lead_id, role, message)
+     (dealership_id, lead_id, sender, message)
      VALUES ($1, $2, 'human', $3)`,
-    [user.dealershipId, leadId, message]
+    [user.dealership_id, leadId, message]
   );
 
-  return {
-    success: true
-  };
+  return { success: true };
 }
 
 module.exports = {

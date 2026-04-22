@@ -1,10 +1,15 @@
 const pool = require("../../../config/db");
 
-async function calculateLeadScore(leadId) {
+async function calculateLeadScore(leadId, dealershipId) {
+  if (dealershipId === undefined || dealershipId === null) {
+    throw new Error("dealership_id obrigatório em calculateLeadScore");
+  }
+
   const result = await pool.query(
     `SELECT COUNT(*) FROM lead_conversations
-     WHERE lead_id = $1`,
-    [leadId]
+     WHERE lead_id = $1
+       AND dealership_id = $2`,
+    [leadId, dealershipId]
   );
 
   const totalMessages = parseInt(result.rows[0].count);
@@ -16,8 +21,11 @@ async function calculateLeadScore(leadId) {
   if (totalMessages >= 10) score += 30;
 
   await pool.query(
-    `UPDATE leads SET score = $2 WHERE id = $1`,
-    [leadId, score]
+    `UPDATE leads
+     SET score = $3
+     WHERE id = $1
+       AND dealership_id = $2`,
+    [leadId, dealershipId, score]
   );
 
   return score;

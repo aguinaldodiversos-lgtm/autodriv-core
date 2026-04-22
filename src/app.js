@@ -2,17 +2,50 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 
+const { CORS_ORIGINS, NODE_ENV } = require("./config/env");
 const localAI = require("./infrastructure/ai/localAI.service");
 
 const app = express();
 
 /* =========================
-   MIDDLEWARES
+   HARDENING BÁSICO
 ========================= */
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
+app.use(helmet());
+
+/* CORS com allowlist explícita. Lista vazia só é aceita em dev. */
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (CORS_ORIGINS.length === 0 && NODE_ENV !== "production") {
+      return callback(null, true);
+    }
+    if (CORS_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS bloqueado para origem: ${origin}`));
+  },
+  credentials: true
+};
+app.use(cors(corsOptions));
+
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
+/* =========================
+   RATE LIMIT EM AUTH
+========================= */
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too_many_requests" }
+});
 
 /* =========================
    INICIALIZAÇÃO SEGURA DA IA LOCAL
@@ -27,7 +60,6 @@ async function initializeLocalAI() {
   }
 }
 
-// inicializa sem bloquear o app
 initializeLocalAI();
 
 /* =========================
@@ -71,7 +103,7 @@ app.get("/", (req, res) => {
 /* =========================
    REGISTRO DAS ROTAS
 ========================= */
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/vehicles", vehiclesRoutes);
 app.use("/api/leads", leadsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
@@ -99,6 +131,9 @@ app.use("/api/approval-dashboard", approvalDashboardRoutes);
    HANDLER DE ERROS
 ========================= */
 app.use((err, req, res, next) => {
+  if (err && err.message && err.message.startsWith("CORS bloqueado")) {
+    return res.status(403).json({ error: "cors_blocked" });
+  }
   console.error("Erro global:", err);
   res.status(500).json({
     error: "Erro interno do servidor"

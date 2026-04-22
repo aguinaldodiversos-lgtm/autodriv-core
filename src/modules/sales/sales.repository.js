@@ -18,7 +18,11 @@ async function createSale(data) {
   return result.rows[0];
 }
 
-async function updateApprovalStatus(saleId, status, userId, notes) {
+async function updateApprovalStatus(saleId, status, userId, notes, dealershipId) {
+  if (dealershipId === undefined || dealershipId === null) {
+    throw new Error("dealership_id obrigatório em updateApprovalStatus");
+  }
+
   const update = await pool.query(
     `UPDATE sales
      SET approval_status = $1,
@@ -26,9 +30,12 @@ async function updateApprovalStatus(saleId, status, userId, notes) {
          approved_at = NOW(),
          rejection_reason = $3
      WHERE id = $4
+       AND dealership_id = $5
      RETURNING *`,
-    [status, userId, notes || null, saleId]
+    [status, userId, notes || null, saleId, dealershipId]
   );
+
+  if (!update.rows[0]) return null;
 
   await pool.query(
     `INSERT INTO sales_approval_history
@@ -40,10 +47,17 @@ async function updateApprovalStatus(saleId, status, userId, notes) {
   return update.rows[0];
 }
 
-async function getSaleById(saleId) {
+async function getSaleById(saleId, dealershipId) {
+  if (dealershipId === undefined || dealershipId === null) {
+    throw new Error("dealership_id obrigatório em getSaleById");
+  }
+
   const result = await pool.query(
-    `SELECT * FROM sales WHERE id = $1`,
-    [saleId]
+    `SELECT *
+     FROM sales
+     WHERE id = $1
+       AND dealership_id = $2`,
+    [saleId, dealershipId]
   );
 
   return result.rows[0];

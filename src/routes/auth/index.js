@@ -10,29 +10,42 @@ const router = express.Router();
 ========================= */
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
+
+    if (typeof email !== "string" || typeof password !== "string" ||
+        !email.trim() || !password) {
+      return res.status(400).json({ error: "Credenciais inválidas" });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
 
     const result = await pool.query(
-      `SELECT * FROM users WHERE email = $1`,
-      [email]
+      `SELECT id, email, password_hash, dealership_id, role
+       FROM users
+       WHERE email = $1`,
+      [normalizedEmail]
     );
 
     const user = result.rows[0];
-    if (!user) {
-      return res.status(401).json({ error: "Usuário não encontrado" });
-    }
 
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) {
-      return res.status(401).json({ error: "Senha inválida" });
-    }
+    // Credenciais genéricas para evitar enumeração de usuários.
+    const invalid = () =>
+      res.status(401).json({ error: "Credenciais inválidas" });
+
+    if (!user) return invalid();
+
+    const valid = await bcrypt.compare(password, user.password_hash || "");
+    if (!valid) return invalid();
 
     const token = jwt.sign(
       {
-        user_id: user.id
+        id: user.id,
+        user_id: user.id,
+        dealership_id: user.dealership_id,
+        role: user.role
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d", algorithm: "HS256" }
     );
 
     res.json({ token });

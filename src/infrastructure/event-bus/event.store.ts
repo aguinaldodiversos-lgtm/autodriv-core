@@ -1,23 +1,22 @@
 // src/infrastructure/event-bus/event.store.ts
 
 import { DatabaseClient } from "@/infrastructure/db/client"
-import { DomainEvent } from "./event.types"
-import { logger } from "@/infrastructure/logger/logger"
+import { DomainEvent }    from "./event.types"
+import { logger }         from "@/infrastructure/logger/logger"
 
 export class EventStore {
 
   constructor(private db: DatabaseClient) {}
 
-  /**
-   * 🔥 Persistir evento (Event Sourcing)
-   */
+  // ─── Persistir evento ─────────────────────────────────────────────────────
   async persist<T = any>(event: DomainEvent<T>): Promise<void> {
 
     await this.db.query({
       text: `
         INSERT INTO event_store
-        (id, tenant_id, event_name, payload, occurred_at)
+          (id, tenant_id, event_name, payload, occurred_at)
         VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (id) DO NOTHING
       `,
       params: [
         event.id,
@@ -28,111 +27,78 @@ export class EventStore {
       ]
     })
 
-    logger.info(
-      `📦 Event persisted: ${event.name} | ${event.id}`
-    )
+    logger.info(`📦 Evento persistido: ${event.name} | ${event.id}`)
   }
 
-  /**
-   * 🔁 Replay eventos por tenant
-   */
+  // ─── Replay por tenant ────────────────────────────────────────────────────
   async replayByTenant(tenantId: string): Promise<DomainEvent[]> {
 
-    const result = await this.db.query({
+    const rows = await this.db.query<any>({
       text: `
-        SELECT *
-        FROM event_store
+        SELECT * FROM event_store
         WHERE tenant_id = $1
         ORDER BY occurred_at ASC
       `,
       params: [tenantId]
     })
 
-    return result.rows.map(row => ({
-      id: row.id,
-      name: row.event_name,
-      tenantId: row.tenant_id,
-      payload: row.payload,
+    return rows.map(row => ({
+      id:         row.id,
+      name:       row.event_name,
+      tenantId:   row.tenant_id,
+      payload:    typeof row.payload === "string"
+                    ? JSON.parse(row.payload)
+                    : row.payload,
       occurredAt: row.occurred_at
     }))
   }
 
-  /**
-   * 🔁 Replay global (todos tenants)
-   */
+  // ─── Replay global ────────────────────────────────────────────────────────
   async replayAll(): Promise<DomainEvent[]> {
 
-    const result = await this.db.query({
+    const rows = await this.db.query<any>({
       text: `
-        SELECT *
-        FROM event_store
+        SELECT * FROM event_store
         ORDER BY occurred_at ASC
       `
     })
 
-    return result.rows.map(row => ({
-      id: row.id,
-      name: row.event_name,
-      tenantId: row.tenant_id,
-      payload: row.payload,
+    return rows.map(row => ({
+      id:         row.id,
+      name:       row.event_name,
+      tenantId:   row.tenant_id,
+      payload:    typeof row.payload === "string"
+                    ? JSON.parse(row.payload)
+                    : row.payload,
       occurredAt: row.occurred_at
     }))
   }
 
-  /**
-   * 🛑 Verifica se evento já foi processado (idempotência)
-   */
+  // ─── Idempotência ─────────────────────────────────────────────────────────
   async isProcessed(eventId: string): Promise<boolean> {
 
-    const result = await this.db.query({
+    const rows = await this.db.query<any>({
       text: `
-        SELECT 1
-        FROM processed_events
+        SELECT 1 FROM processed_events
         WHERE event_id = $1
         LIMIT 1
       `,
       params: [eventId]
     })
 
-    return result.rowCount > 0
+    return rows.length > 0
   }
 
-  /**
-   * ✅ Marca evento como processado
-   */
+  // ─── Marcar como processado ───────────────────────────────────────────────
   async markProcessed(eventId: string): Promise<void> {
 
     await this.db.query({
       text: `
-        INSERT INTO processed_events
-        (event_id, processed_at)
+        INSERT INTO processed_events (event_id, processed_at)
         VALUES ($1, NOW())
         ON CONFLICT (event_id) DO NOTHING
       `,
       params: [eventId]
     })
-  }
-
-  /**
-   * 🧠 Persistência transacional (opcional)
-   */
-  async persistTransactional<T = any>(
-    event: DomainEvent<T>
-  ): Promise<void> {
-
-    await this.db.query({ text: "BEGIN" })
-
-    try {
-
-      await this.persist(event)
-
-      await this.db.query({ text: "COMMIT" })
-
-    } catch (error) {
-
-      await this.db.query({ text: "ROLLBACK" })
-      logger.error("❌ Event transaction failed", error)
-      throw error
-    }
   }
 }

@@ -47,10 +47,7 @@ export class SystemController {
 
     } catch (error) {
 
-      logger.error(
-        "❌ Admin replay failed",
-        error
-      )
+      logger.error({ err: error }, "❌ Admin replay failed")
 
       next(error)
     }

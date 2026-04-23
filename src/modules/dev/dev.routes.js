@@ -1,6 +1,23 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../../config/db");
+const { getDefaultQueue } = require("../../infrastructure/jobs/default.queue");
+
+router.post("/queue/ping", async (req, res) => {
+  try {
+    const q = getDefaultQueue();
+    if (!q) {
+      return res
+        .status(503)
+        .json({ error: "Redis não configurado (REDIS_URL)" });
+    }
+    const job = await q.add("ping", { at: Date.now() });
+    res.json({ ok: true, jobId: job.id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Falha ao enfileirar" });
+  }
+});
 
 router.post("/create-trial", async (req, res) => {
   try {

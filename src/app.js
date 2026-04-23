@@ -1,11 +1,17 @@
 require("dotenv").config();
 
+const { randomUUID } = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const pinoHttp = require("pino-http");
+const { RedisStore } = require("rate-limit-redis");
 const pkg = require("../package.json");
 
+const logger = require("./config/logger");
+const pool = require("./config/db");
+const { getRedis } = require("./config/redis");
 const localAI = require("./infrastructure/ai/localAI.service");
 
 const app = express();
@@ -46,33 +52,84 @@ function corsMiddleware(req, res, next) {
 
 app.use(corsMiddleware);
 
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req) => {
+      const hdr = req.headers["x-request-id"];
+      if (hdr) return Array.isArray(hdr) ? hdr[0] : String(hdr);
+      return randomUUID();
+    },
+    customLogLevel: (req, res, err) => {
+      if (err) return "error";
+      if (res.statusCode >= 500) return "error";
+      if (res.statusCode >= 400) return "warn";
+      return "info";
+    },
+    autoLogging: {
+      ignore: (req) =>
+        req.url === "/health" ||
+        req.url === "/ready" ||
+        req.url === "/favicon.ico"
+    }
+  })
+);
+
+app.use((req, res, next) => {
+  if (req.id) res.setHeader("X-Request-Id", req.id);
+  next();
+});
+
+function createLimiter(options, keyPrefix) {
+  const redis = getRedis();
+  const store =
+    redis &&
+    new RedisStore({
+      sendCommand: (command, ...args) => redis.call(command, ...args),
+      prefix: `rl:${keyPrefix}:`
+    });
+  return rateLimit({
+    ...options,
+    ...(store ? { store } : {})
+  });
+}
+
 const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || "900000", 10);
 const readMax = parseInt(process.env.RATE_LIMIT_READ_MAX || "600", 10);
 const authMax = parseInt(process.env.AUTH_RATE_LIMIT_MAX || "30", 10);
 const writeMax = parseInt(process.env.RATE_LIMIT_WRITE_MAX || "120", 10);
 
-const authLimiter = rateLimit({
-  windowMs,
-  max: authMax,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Muitas tentativas. Tente mais tarde." }
-});
+const authLimiter = createLimiter(
+  {
+    windowMs,
+    max: authMax,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Muitas tentativas. Tente mais tarde." }
+  },
+  "auth"
+);
 
-const readLimiter = rateLimit({
-  windowMs,
-  max: readMax,
-  standardHeaders: true,
-  legacyHeaders: false
-});
+const readLimiter = createLimiter(
+  {
+    windowMs,
+    max: readMax,
+    standardHeaders: true,
+    legacyHeaders: false
+  },
+  "read"
+);
 
-const writeLimiter = rateLimit({
-  windowMs,
-  max: writeMax,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Limite de alterações excedido. Tente mais tarde." }
-});
+const writeLimiter = createLimiter(
+  {
+    windowMs,
+    max: writeMax,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Limite de alterações excedido. Tente mais tarde." }
+  },
+  "write"
+);
 
 app.use((req, res, next) => {
   if (!req.path.startsWith("/api")) return next();
@@ -85,6 +142,20 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", service: "autodriv-core" });
+});
+
+app.get("/ready", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ status: "ready" });
+  } catch (err) {
+    logger.error({ err }, "readiness falhou");
+    res.status(503).json({ status: "not_ready" });
+  }
+});
 
 const authRoutes = require("./modules/auth/auth.routes");
 app.use("/api/auth", authLimiter, authRoutes);
@@ -175,7 +246,7 @@ app.get("/api", (req, res) => {
    HANDLER DE ERROS
 ========================= */
 app.use((err, req, res, next) => {
-  console.error("Erro global:", err);
+  logger.error({ err }, "Erro global");
   res.status(500).json({
     error: "Erro interno do servidor"
   });

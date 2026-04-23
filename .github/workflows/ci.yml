@@ -50,3 +50,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node scripts/ci-migrate-and-tenant-check.js
+      - run: npm test

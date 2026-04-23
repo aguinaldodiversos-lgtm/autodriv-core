@@ -42,4 +42,11 @@ const pool = new Pool({
     : {})
 });
 
+const stmtMs = parseInt(process.env.PG_STATEMENT_TIMEOUT_MS || "0", 10);
+if (Number.isFinite(stmtMs) && stmtMs > 0) {
+  pool.on("connect", (client) => {
+    client.query(`SET statement_timeout TO ${stmtMs}`);
+  });
+}
+
 module.exports = pool;

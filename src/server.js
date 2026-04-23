@@ -1,11 +1,16 @@
 require("dotenv").config();
 
+const logger = require("./config/logger");
 const runMigrations = require("./database/migrate");
 const app = require("./app");
 const {
   startWhatsAppForConfiguredDealerships
 } = require("./modules/whatsapp_baileys/whatsapp.bootstrap");
 const PORT = process.env.PORT || 10000;
+
+const skipWhatsApp =
+  process.env.API_SKIP_WHATSAPP === "true" ||
+  process.env.API_SKIP_WHATSAPP === "1";
 
 async function start() {
   try {
@@ -18,6 +23,10 @@ async function start() {
       console.log(`🚀 Servidor rodando na porta ${PORT}`);
       console.log("=================================");
 
+      if (skipWhatsApp) {
+        logger.info("WhatsApp bootstrap ignorado (API_SKIP_WHATSAPP)");
+        return;
+      }
       try {
         console.log("📱 Iniciando conexão com WhatsApp...");
         await startWhatsAppForConfiguredDealerships();

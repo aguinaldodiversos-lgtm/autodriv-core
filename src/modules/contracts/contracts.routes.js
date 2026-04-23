@@ -3,11 +3,11 @@
 const express = require("express");
 const router = express.Router();
 const controller = require("./contracts.controller");
-const authMiddleware = require("../../middlewares/auth.middleware");
+const auth = require("../../middlewares/auth");
 
-router.post("/:id/send-approval", authMiddleware, controller.sendForApproval);
-router.post("/:id/approve", authMiddleware, controller.approve);
-router.post("/:id/reject", authMiddleware, controller.reject);
-router.post("/:saleId/generate", authMiddleware, controller.generate);
+router.post("/:id/send-approval", auth, controller.sendForApproval);
+router.post("/:id/approve", auth, controller.approve);
+router.post("/:id/reject", auth, controller.reject);
+router.post("/:saleId/generate", auth, controller.generate);
 
 module.exports = router;

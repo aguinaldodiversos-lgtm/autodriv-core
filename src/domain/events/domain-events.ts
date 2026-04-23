@@ -6,5 +6,6 @@ export const DomainEvents = {
   SaleCompleted: "sale.completed",
   VehicleUpdated: "vehicle.updated",
   CampaignUpdated: "campaign.updated",
-  SnapshotGenerated: "snapshot.generated"
+  SnapshotGenerated: "snapshot.generated",
+  PremiumAIRequested: "premium.ai.requested"
 } as const

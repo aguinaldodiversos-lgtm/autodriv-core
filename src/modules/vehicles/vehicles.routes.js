@@ -1,27 +1,28 @@
 const express = require("express");
 const router = express.Router();
 
-const auth = require("../../middlewares/auth");
+const authenticate = require("../../middlewares/auth");
+const requireAuth = authenticate.withSubscription;
 
 const controller = require("./vehicles.controller");
 
 /* =========================
-   ROTAS
+   ROTAS (exigem assinatura ativa)
 ========================= */
 
-router.get("/", auth, controller.getVehicles);
+router.get("/", requireAuth, controller.getVehicles);
 
-router.get("/:id", auth, controller.getVehicleById);
+router.get("/:id", requireAuth, controller.getVehicleById);
 
-router.post("/", auth, controller.createVehicle);
+router.post("/", requireAuth, controller.createVehicle);
 
-router.put("/:id", auth, controller.updateVehicle);
+router.put("/:id", requireAuth, controller.updateVehicle);
 
-router.delete("/:id", auth, controller.deleteVehicle);
+router.delete("/:id", requireAuth, controller.deleteVehicle);
 
 router.post(
   "/:id/apply-suggestion",
-  auth,
+  requireAuth,
   controller.applyVehicleSuggestion
 );
 

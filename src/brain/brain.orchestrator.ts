@@ -1,8 +1,8 @@
 // src/brain/brain.orchestrator.ts
 
 import { randomUUID } from "crypto"
-import { RevenueIntelligenceCore } from "@/brain/revenue/revenue.core"
-import { DecisionEngine } from "@/brain/revenue/decision.engine"
+import { RevenueIntelligenceCore } from "@/brain/revenue-intelligence.core"
+import { DecisionEngine } from "@/brain/decision.engine"
 import { EventBus } from "@/infrastructure/event-bus/event.bus"
 import { DomainEvent } from "@/infrastructure/event-bus/event.types"
 import { DomainEvents } from "@/domain/events/domain-events"
@@ -139,8 +139,8 @@ export class BrainOrchestrator {
     } catch (error) {
 
       logger.error(
-        `❌ Brain processing failed`,
-        error
+        { err: error },
+        `❌ Brain processing failed`
       )
     }
   }

@@ -1,19 +1,20 @@
 const db = require("../config/db")
 
 class HealthScoreEngine {
+  /** tenantId na prática é dealership_id (schema legado usava tenant_id). */
   async calculate(tenantId) {
     const vendas = await db.query(
-      `SELECT COUNT(*) as total FROM sales WHERE tenant_id = $1 AND created_at >= NOW() - INTERVAL '30 days'`,
+      `SELECT COUNT(*) as total FROM sales WHERE dealership_id = $1 AND created_at >= NOW() - INTERVAL '30 days'`,
       [tenantId]
     )
 
     const estoque = await db.query(
-      `SELECT COUNT(*) as total FROM vehicles WHERE tenant_id = $1 AND status = 'available'`,
+      `SELECT COUNT(*) as total FROM vehicles WHERE dealership_id = $1 AND status = 'available'`,
       [tenantId]
     )
 
     const capital = await db.query(
-      `SELECT SUM(cost) as total FROM vehicles WHERE tenant_id = $1 AND status = 'available'`,
+      `SELECT SUM(COALESCE(price, 0)) as total FROM vehicles WHERE dealership_id = $1 AND status = 'available'`,
       [tenantId]
     )
 

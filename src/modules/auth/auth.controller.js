@@ -1,7 +1,9 @@
 const pool = require("../../config/db");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { JWT_SECRET } = require("../../config/env");
 
+/** Payload único do sistema (validado em middlewares/auth.js). */
 function generateToken(user) {
   return jwt.sign(
     {
@@ -9,7 +11,7 @@ function generateToken(user) {
       dealership_id: user.dealership_id,
       role: user.role
     },
-    process.env.JWT_SECRET,
+    JWT_SECRET,
     { expiresIn: "7d" }
   );
 }
@@ -83,13 +85,9 @@ async function register(req, res) {
 
     await client.query(
       `INSERT INTO subscriptions
-       (dealership_id, email, plan, status, current_period_end)
-       VALUES ($1,$2,'trial','active',$3)`,
-      [
-        dealership.id,
-        normalizedEmail,
-        trialEnd
-      ]
+       (dealership_id, plan, status, current_period_end)
+       VALUES ($1,'trial','active',$2)`,
+      [dealership.id, trialEnd]
     );
 
     await client.query("COMMIT");

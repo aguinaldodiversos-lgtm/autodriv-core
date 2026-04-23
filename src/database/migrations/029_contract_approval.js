@@ -1,17 +1,35 @@
-exports.up = async function (knex) {
-  await knex.schema.alterTable("contracts", (table) => {
-    table.string("status").defaultTo("draft"); 
-    table.integer("approved_by").references("id").inTable("users");
-    table.timestamp("approved_at");
-    table.text("rejection_reason");
-  });
-};
+module.exports = {
+  name: "029_contract_approval",
 
-exports.down = async function (knex) {
-  await knex.schema.alterTable("contracts", (table) => {
-    table.dropColumn("status");
-    table.dropColumn("approved_by");
-    table.dropColumn("approved_at");
-    table.dropColumn("rejection_reason");
-  });
+  async up(pool) {
+    await pool.query(`
+      ALTER TABLE contracts
+      ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';
+    `);
+
+    await pool.query(`
+      ALTER TABLE contracts
+      ADD COLUMN IF NOT EXISTS approved_by INTEGER REFERENCES users(id);
+    `);
+
+    await pool.query(`
+      ALTER TABLE contracts
+      ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP;
+    `);
+
+    await pool.query(`
+      ALTER TABLE contracts
+      ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+    `);
+
+    await pool.query(`
+      ALTER TABLE contracts
+      ADD COLUMN IF NOT EXISTS observations TEXT;
+    `);
+
+    await pool.query(`
+      ALTER TABLE contracts
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+    `);
+  }
 };

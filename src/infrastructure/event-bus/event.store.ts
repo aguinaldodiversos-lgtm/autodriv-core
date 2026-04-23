@@ -38,7 +38,7 @@ export class EventStore {
    */
   async replayByTenant(tenantId: string): Promise<DomainEvent[]> {
 
-    const result = await this.db.query({
+    const rows = await this.db.query<any>({
       text: `
         SELECT *
         FROM event_store
@@ -48,7 +48,7 @@ export class EventStore {
       params: [tenantId]
     })
 
-    return result.rows.map(row => ({
+    return rows.map(row => ({
       id: row.id,
       name: row.event_name,
       tenantId: row.tenant_id,
@@ -62,7 +62,7 @@ export class EventStore {
    */
   async replayAll(): Promise<DomainEvent[]> {
 
-    const result = await this.db.query({
+    const rows = await this.db.query<any>({
       text: `
         SELECT *
         FROM event_store
@@ -70,7 +70,7 @@ export class EventStore {
       `
     })
 
-    return result.rows.map(row => ({
+    return rows.map(row => ({
       id: row.id,
       name: row.event_name,
       tenantId: row.tenant_id,
@@ -84,7 +84,7 @@ export class EventStore {
    */
   async isProcessed(eventId: string): Promise<boolean> {
 
-    const result = await this.db.query({
+    const rows = await this.db.query({
       text: `
         SELECT 1
         FROM processed_events
@@ -94,7 +94,7 @@ export class EventStore {
       params: [eventId]
     })
 
-    return result.rowCount > 0
+    return rows.length > 0
   }
 
   /**
@@ -131,7 +131,7 @@ export class EventStore {
     } catch (error) {
 
       await this.db.query({ text: "ROLLBACK" })
-      logger.error("❌ Event transaction failed", error)
+      logger.error({ err: error }, "❌ Event transaction failed")
       throw error
     }
   }

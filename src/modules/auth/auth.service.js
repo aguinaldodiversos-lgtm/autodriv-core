@@ -38,8 +38,8 @@ async function register({ name, email, password }) {
     await client.query("COMMIT");
 
     const token = generateToken({
-      userId: user.rows[0].id,
-      dealershipId: dealership.rows[0].id,
+      user_id: user.rows[0].id,
+      dealership_id: dealership.rows[0].id,
       role: "admin"
     });
 
@@ -69,8 +69,8 @@ async function login({ email, password }) {
   if (!valid) throw new Error("Senha inválida");
 
   const token = generateToken({
-    userId: user.id,
-    dealershipId: user.dealership_id,
+    user_id: user.id,
+    dealership_id: user.dealership_id,
     role: user.role
   });
 

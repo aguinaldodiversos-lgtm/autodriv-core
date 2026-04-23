@@ -23,6 +23,12 @@ const migrations = [
   require("./migrations/019_fix_subscription_plan"),
   require("./migrations/020_normalize_subscriptions"),
   require("./migrations/023_vehicle_entry_date"),
+  require("./migrations/024_vehicle_fipe"),
+  require("./migrations/024_vehicle_featured"),
+  require("./migrations/028_contracts"),
+  require("./migrations/029_contract_approval"),
+  require("./migrations/030_lead_conversations"),
+  require("./migrations/031_domain_events"),
 ];
 
 async function runMigrations() {

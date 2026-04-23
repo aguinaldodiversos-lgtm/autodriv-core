@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const pkg = require("../package.json");
 
 const localAI = require("./infrastructure/ai/localAI.service");
 
@@ -27,73 +28,75 @@ async function initializeLocalAI() {
   }
 }
 
-// inicializa sem bloquear o app
 initializeLocalAI();
 
 /* =========================
-   ROTAS
+   ROTAS (mapa único: altere só este array)
 ========================= */
-const authRoutes = require("./routes/auth");
-const vehiclesRoutes = require("./modules/vehicles/vehicles.routes");
-const leadsRoutes = require("./modules/leads/leads.routes");
-const dashboardRoutes = require("./modules/dashboard/dashboard.routes");
-const aiSellerRoutes = require("./modules/ai_seller/aiSeller.routes");
-const aiSettingsRoutes = require("./modules/ai_settings/aiSettings.routes");
-const pipelineRoutes = require("./modules/pipeline/pipeline.routes");
-const leadsImportRoutes = require("./modules/leads_import/leadsImport.routes");
-const whatsappRoutes = require("./modules/whatsapp/whatsapp.routes");
-const inboxRoutes = require("./modules/inbox/inbox.routes");
-const leadDistributionRoutes = require("./modules/lead_distribution/distribution.routes");
-const forecastRoutes = require("./modules/analytics/forecast.routes");
-const dashboardIntelligenceRoutes = require("./modules/dashboard_intelligence/dashboard.routes");
-const notificationRoutes = require("./modules/notifications/rules/notification.routes");
-const goalRoutes = require("./modules/goals/goal.routes");
-const funnelRoutes = require("./modules/funnel_analysis/funnel.routes");
-const rankingRoutes = require("./modules/seller_ranking/ranking.routes");
-const strategyRoutes = require("./modules/ai_strategy/strategy.routes");
-const commissionRoutes = require("./modules/commission/commission.routes");
-const salesRoutes = require("./modules/sales/sales.routes");
-const contractRoutes = require("./modules/contracts/contracts.routes");
-const approvalPanelRoutes = require("./modules/sales_approval_panel/approvalPanel.routes");
-const approvalDashboardRoutes = require("./modules/approval_dashboard/approvalDashboard.routes");
+const mountRoutes = [
+  ["/api/auth", require("./modules/auth/auth.routes")],
+  ["/api/vehicles", require("./modules/vehicles/vehicles.routes")],
+  ["/api/leads", require("./modules/leads/leads.routes")],
+  ["/api/dashboard", require("./modules/dashboard/dashboard.routes")],
+  ["/api/ai-seller", require("./modules/ai_seller/aiSeller.routes")],
+  ["/api/ai-settings", require("./modules/ai_settings/aiSettings.routes")],
+  ["/api/pipeline", require("./modules/pipeline/pipeline.routes")],
+  ["/api/leads-import", require("./modules/leads_import/leadsImport.routes")],
+  ["/api/whatsapp", require("./modules/whatsapp/whatsapp.routes")],
+  ["/api/inbox", require("./modules/inbox/inbox.routes")],
+  ["/api/lead-distribution", require("./modules/lead_distribution/distribution.routes")],
+  ["/api/forecast", require("./modules/analytics/forecast.routes")],
+  ["/api/dashboard-intelligence", require("./modules/dashboard_intelligence/dashboard.routes")],
+  ["/api/notifications", require("./modules/notifications/rules/notification.routes")],
+  ["/api/goals", require("./modules/goals/goal.routes")],
+  ["/api/funnel-analysis", require("./modules/funnel_analysis/funnel.routes")],
+  ["/api/seller-ranking", require("./modules/seller_ranking/ranking.routes")],
+  ["/api/ai-strategy", require("./modules/ai_strategy/strategy.routes")],
+  ["/api/commission", require("./modules/commission/commission.routes")],
+  ["/api/sales", require("./modules/sales/sales.routes")],
+  ["/api/contracts", require("./modules/contracts/contracts.routes")],
+  ["/api/sales-approval-panel", require("./modules/sales_approval_panel/approvalPanel.routes")],
+  ["/api/approval-dashboard", require("./modules/approval_dashboard/approvalDashboard.routes")],
+  ["/api/clients", require("./modules/clients/clients.routes")],
+  ["/api/finance", require("./modules/finance/finance.routes")],
+  ["/api/proposals", require("./modules/proposals/proposals.routes")],
+  ["/api/tasks", require("./modules/tasks/tasks.routes")],
+  ["/api/ads", require("./modules/ads/ads.routes")],
+  ["/api/integrations", require("./modules/integrations/integrations.routes")],
+  ["/api/maintenance", require("./modules/maintenance/maintenance.routes")],
+  ["/api/images", require("./modules/images/images.routes")],
+  ["/api/public", require("./modules/public/public.routes")]
+];
+
+if (process.env.NODE_ENV !== "production") {
+  mountRoutes.push(["/api/dev", require("./modules/dev/dev.routes")]);
+}
+
+mountRoutes.forEach(([path, router]) => {
+  app.use(path, router);
+});
 
 /* =========================
-   ENDPOINT DE SAÚDE
+   ENDPOINT DE SAÚDE + MAPA DA API
 ========================= */
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
     service: "autodriv-core",
-    localAI: localAI ? "initialized_or_attempted" : "not_loaded"
+    version: pkg.version,
+    localAI: localAI ? "initialized_or_attempted" : "not_loaded",
+    apiMap: "/api"
   });
 });
 
-/* =========================
-   REGISTRO DAS ROTAS
-========================= */
-app.use("/api/auth", authRoutes);
-app.use("/api/vehicles", vehiclesRoutes);
-app.use("/api/leads", leadsRoutes);
-app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/ai-seller", aiSellerRoutes);
-app.use("/api/ai-settings", aiSettingsRoutes);
-app.use("/api/pipeline", pipelineRoutes);
-app.use("/api/leads-import", leadsImportRoutes);
-app.use("/api/whatsapp", whatsappRoutes);
-app.use("/api/inbox", inboxRoutes);
-app.use("/api/lead-distribution", leadDistributionRoutes);
-app.use("/api/forecast", forecastRoutes);
-app.use("/api/dashboard-intelligence", dashboardIntelligenceRoutes);
-app.use("/api/notifications", notificationRoutes);
-app.use("/api/goals", goalRoutes);
-app.use("/api/funnel-analysis", funnelRoutes);
-app.use("/api/seller-ranking", rankingRoutes);
-app.use("/api/ai-strategy", strategyRoutes);
-app.use("/api/commission", commissionRoutes);
-app.use("/api/sales", salesRoutes);
-app.use("/api/contracts", contractRoutes);
-app.use("/api/sales-approval-panel", approvalPanelRoutes);
-app.use("/api/approval-dashboard", approvalDashboardRoutes);
+app.get("/api", (req, res) => {
+  res.json({
+    service: pkg.name,
+    version: pkg.version,
+    description: pkg.description,
+    mounts: mountRoutes.map(([prefix]) => prefix)
+  });
+});
 
 /* =========================
    HANDLER DE ERROS

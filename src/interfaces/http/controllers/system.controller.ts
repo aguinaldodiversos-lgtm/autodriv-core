@@ -1,7 +1,7 @@
 // src/interfaces/http/controllers/system.controller.ts
 
 import { Request, Response, NextFunction } from "express"
-import { ReplayTenantUseCase } from "@/application/use-cases/system/replay-tenant.usecase"
+import { ReplayTenantUseCase } from "@/application/use-cases/lead/system/replay-tenant.usecase"
 import { logger } from "@/infrastructure/logger/logger"
 
 export class SystemController {
@@ -48,8 +48,8 @@ export class SystemController {
     } catch (error) {
 
       logger.error(
-        "❌ Admin replay failed",
-        error
+        { err: error },
+        "❌ Admin replay failed"
       )
 
       next(error)

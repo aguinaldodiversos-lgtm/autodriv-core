@@ -18,11 +18,11 @@ router.post("/create-trial", async (req, res) => {
     await pool.query(
       `
       INSERT INTO subscriptions
-      (dealership_id, email, plan, status, current_period_end)
-      VALUES ($1,$2,'trial','active',$3)
-      ON CONFLICT DO NOTHING
+      (dealership_id, plan, status, current_period_end)
+      VALUES ($1,'trial','active',$2)
+      ON CONFLICT (dealership_id) DO NOTHING
       `,
-      [dealership_id, email, trialEnd]
+      [dealership_id, trialEnd]
     );
 
     res.json({

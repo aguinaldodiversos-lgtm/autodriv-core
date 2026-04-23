@@ -13,10 +13,10 @@ class VehicleIntelligenceCore {
   async evaluate(vehicleData) {
 
     const saleScore =
-      await this.saleProb.score(
+      (await this.saleProb.score(
         vehicleData.id,
         vehicleData.tenantId
-      )
+      )) ?? 50
 
     const margin =
       vehicleData.price - vehicleData.cost

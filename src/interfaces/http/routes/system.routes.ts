@@ -1,7 +1,6 @@
 import { Router } from "express"
 import { SystemController } from "../controllers/system.controller"
-import { ReplayTenantUseCase } from "@/application/use-cases/system/replay-tenant.usecase"
-import { EventStore } from "@/infrastructure/event-bus/event.store"
+import { ReplayTenantUseCase } from "@/application/use-cases/lead/system/replay-tenant.usecase"
 
 export function systemRoutes(context: any) {
 

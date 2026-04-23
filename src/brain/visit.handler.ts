@@ -1,13 +1,15 @@
 import { EventHandler } from "@/infrastructure/event-bus/event.handler"
 import { DomainEvent } from "@/infrastructure/event-bus/event.types"
-import { VisitPipelineEngine } from "./visit-pipeline.engine"
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const VisitPipelineEngine = require("./visit-pipeline.engine")
 
 export class VisitHandler implements EventHandler {
 
   eventName = "lead.created"
 
   constructor(
-    private visitPipeline: VisitPipelineEngine
+    private visitPipeline: InstanceType<typeof VisitPipelineEngine>
   ) {}
 
   async handle(event: DomainEvent): Promise<void> {

@@ -92,7 +92,7 @@ async function handleMessage(leadId, message, history = []) {
 
     limitedHistory.forEach(item => {
       messages.push({
-        role: item.sender === "client"
+        role: item.role === "client"
           ? "user"
           : "assistant",
         content: item.message

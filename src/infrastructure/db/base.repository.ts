@@ -1,3 +1,5 @@
+import type { DatabaseClient } from "./client"
+
 export abstract class BaseRepository<T> {
   constructor(protected db: DatabaseClient) {}
 

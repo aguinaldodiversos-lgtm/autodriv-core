@@ -5,6 +5,7 @@ export interface DecisionResult {
   reducePrice?: boolean
   prioritizeLeads?: boolean
   liquidateStock?: boolean
+  usePremiumAI?: boolean
 }
 
 export class DecisionEngine {

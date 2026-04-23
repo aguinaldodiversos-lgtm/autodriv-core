@@ -1,7 +1,7 @@
 import { EventHandler } from "@/infrastructure/event-bus/event.handler"
 import { DomainEvent } from "@/infrastructure/event-bus/event.types"
 import { RevenueSnapshotRepository } from "@/infrastructure/db/repositories/revenue-snapshot.repository"
-import { RevenueIntelligenceCore } from "./revenue-intelligence.core"
+import { RevenueIntelligenceCore } from "../revenue-intelligence.core"
 
 export class SnapshotHandler implements EventHandler {
 

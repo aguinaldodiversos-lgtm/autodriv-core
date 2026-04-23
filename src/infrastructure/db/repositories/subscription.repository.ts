@@ -1,10 +1,12 @@
+import type { DatabaseClient } from "../client"
+
 export class SubscriptionRepository {
 
   constructor(private db: DatabaseClient) {}
 
   async getActivePlan(dealershipId: string): Promise<string | null> {
 
-    const result = await this.db.query({
+    const rows = await this.db.query<{ plan: string }>({
       text: `
         SELECT plan
         FROM subscriptions
@@ -15,6 +17,6 @@ export class SubscriptionRepository {
       params: [dealershipId]
     })
 
-    return result.rows[0]?.plan ?? null
+    return rows[0]?.plan ?? null
   }
 }

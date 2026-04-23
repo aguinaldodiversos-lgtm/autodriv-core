@@ -70,8 +70,8 @@ export class EventBus {
     } catch (error) {
 
       logger.error(
-        `❌ Failed to persist event: ${event.name}`,
-        error
+        { err: error },
+        `❌ Failed to persist event: ${event.name}`
       )
 
       return
@@ -96,8 +96,8 @@ export class EventBus {
     } catch (error) {
 
       logger.error(
-        `❌ Failed to mark event as processed: ${event.id}`,
-        error
+        { err: error },
+        `❌ Failed to mark event as processed: ${event.id}`
       )
     }
   }
@@ -160,8 +160,8 @@ export class EventBus {
           } catch (error) {
 
             logger.error(
-              `❌ Handler error: ${handler.constructor.name}`,
-              error
+              { err: error },
+              `❌ Handler error: ${handler.constructor.name}`
             )
           }
         })

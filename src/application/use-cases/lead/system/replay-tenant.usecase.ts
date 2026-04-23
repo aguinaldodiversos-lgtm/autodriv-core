@@ -41,8 +41,8 @@ export class ReplayTenantUseCase {
         await this.eventBus.replay(event)
       } catch (error) {
         logger.error(
-          `❌ Replay failed for event ${event.id}`,
-          error
+          { err: error },
+          `❌ Replay failed for event ${event.id}`
         )
         // continua replay mesmo se um evento falhar
       }

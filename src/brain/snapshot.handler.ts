@@ -71,8 +71,8 @@ export class SnapshotHandler implements EventHandler {
     } catch (error) {
 
       logger.error(
-        `❌ Snapshot generation failed for tenant ${event.tenantId}`,
-        error
+        { err: error },
+        `❌ Snapshot generation failed for tenant ${event.tenantId}`
       )
 
       // não lançar erro para não quebrar o EventBus

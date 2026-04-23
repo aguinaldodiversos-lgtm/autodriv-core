@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto"
 import { DomainEvent } from "@/infrastructure/event-bus/event.types"
 
 export interface LeadCreatedPayload {
@@ -10,6 +11,7 @@ export function LeadCreatedEvent(
   tenantId: string
 ): DomainEvent<LeadCreatedPayload> {
   return {
+    id: randomUUID(),
     name: "lead.created",
     payload,
     tenantId,

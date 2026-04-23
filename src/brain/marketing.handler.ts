@@ -1,13 +1,15 @@
 import { EventHandler } from "@/infrastructure/event-bus/event.handler"
 import { DomainEvent } from "@/infrastructure/event-bus/event.types"
-import { MarketingSuperEngine } from "./marketing-super.engine"
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const MarketingSuperEngine = require("./marketing-super.engine")
 
 export class MarketingHandler implements EventHandler {
 
   eventName = "snapshot.generated"
 
   constructor(
-    private marketing: MarketingSuperEngine
+    private marketing: InstanceType<typeof MarketingSuperEngine>
   ) {}
 
   async handle(event: DomainEvent): Promise<void> {

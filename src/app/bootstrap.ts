@@ -1,26 +1,31 @@
 // src/app/bootstrap.ts
 
-import { DatabaseClient } from "@/infrastructure/db/client"
+import type { DatabaseClient } from "@/infrastructure/db/client"
+import { PostgresAdapter } from "@/infrastructure/db/adapters/postgres.adapter"
 import { EventStore } from "@/infrastructure/event-bus/event.store"
 import { EventBus } from "@/infrastructure/event-bus/event.bus"
 
-import { RevenueIntelligenceCore } from "@/brain/revenue/revenue.core"
-import { DecisionEngine } from "@/brain/revenue/decision.engine"
-import { SnapshotHandler } from "@/brain/revenue/snapshot.handler"
+import { RevenueIntelligenceCore } from "@/brain/revenue-intelligence.core"
+import { DecisionEngine } from "@/brain/decision.engine"
+import { SnapshotHandler } from "@/brain/snapshot.handler"
+import { RevenueSnapshotRepository } from "@/infrastructure/db/repositories/revenue-snapshot.repository"
 
 import { BrainOrchestrator } from "@/brain/brain.orchestrator"
 import { BrainHandler } from "@/brain/brain.handler"
 
-import { MarketingSuperEngine } from "@/brain/marketing/campaign.engine"
-import { MarketingHandler } from "@/brain/marketing/marketing.handler"
-
-import { VisitPipelineEngine } from "@/brain/conversion/visit.pipeline"
-import { VisitHandler } from "@/brain/conversion/visit.handler"
+import { MarketingHandler } from "@/brain/marketing.handler"
+import { VisitHandler } from "@/brain/visit.handler"
 
 import { SubscriptionRepository } from "@/infrastructure/db/repositories/subscription.repository"
 import { PlanPolicyService } from "@/domain/services/plan-policy.service"
 
 import { logger } from "@/infrastructure/logger/logger"
+
+// Motores legados em CommonJS (mantidos até migração completa para TS)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const MarketingSuperEngine = require("../brain/marketing-super.engine")
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const VisitPipelineEngine = require("../brain/visit-pipeline.engine")
 
 export interface AppContext {
   db: DatabaseClient
@@ -37,7 +42,10 @@ export async function bootstrap(env: any): Promise<AppContext> {
   /**
    * 1️⃣ Database
    */
-  const db = new DatabaseClient(env)
+  const connectionString =
+    env.DATABASE_URL || process.env.DATABASE_URL || ""
+
+  const db: DatabaseClient = new PostgresAdapter(connectionString)
 
   /**
    * 2️⃣ Event Store (Event Sourcing base)
@@ -78,7 +86,7 @@ export async function bootstrap(env: any): Promise<AppContext> {
    * 7️⃣ Snapshot (Read Model Builder)
    */
   eventBus.register(
-    new SnapshotHandler(db, revenueCore)
+    new SnapshotHandler(new RevenueSnapshotRepository(db), revenueCore)
   )
 
   /**

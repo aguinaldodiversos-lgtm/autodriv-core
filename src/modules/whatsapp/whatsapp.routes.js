@@ -1,6 +1,6 @@
 const express = require("express");
 const controller = require("./whatsapp.controller");
-const auth = require("../../middlewares/auth.middleware");
+const auth = require("../../middlewares/auth");
 const checkPlanLimit = require("../../middlewares/plan.middleware");
 
 const router = express.Router();

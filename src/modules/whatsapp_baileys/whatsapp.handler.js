@@ -19,7 +19,7 @@ async function handleIncomingMessage(sock, jid, text) {
   ========================== */
   const instanceResult = await pool.query(
     `SELECT * FROM whatsapp_instances
-     WHERE phone = $1
+     WHERE phone_number = $1
      LIMIT 1`,
     [phone]
   );

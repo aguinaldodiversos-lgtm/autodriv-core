@@ -1,7 +1,9 @@
+const pool = require("../../config/db");
+const { buildFollowupScript } = require("./followup.script");
+
 async function scheduleLeadFollowups(lead, source = "system") {
   let mode = "full";
 
-  // Se lead for manual ou importado
   if (source === "manual" || source === "import") {
     mode = "late";
   }
@@ -13,12 +15,18 @@ async function scheduleLeadFollowups(lead, source = "system") {
       `INSERT INTO lead_followups
        (dealership_id, lead_id, message, scheduled_at)
        VALUES ($1,$2,$3,$4)`,
-      [
-        lead.dealership_id,
-        lead.id,
-        step.message,
-        step.scheduled_at
-      ]
+      [lead.dealership_id, lead.id, step.message, step.scheduled_at]
     );
   }
 }
+
+async function cancelLeadFollowups(leadId) {
+  await pool.query(`DELETE FROM lead_followups WHERE lead_id = $1`, [
+    leadId
+  ]);
+}
+
+module.exports = {
+  scheduleLeadFollowups,
+  cancelLeadFollowups
+};

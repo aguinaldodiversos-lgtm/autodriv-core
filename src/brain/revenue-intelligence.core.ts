@@ -1,3 +1,5 @@
+// Versão TS (scores já agregados) — bootstrap / orquestrador TS.
+// O .js homónimo calcula a partir de submotores — fluxo CommonJS legado (ex.: general-manager).
 export interface RevenueInput {
   vehicleScore: number
   leadScore: number

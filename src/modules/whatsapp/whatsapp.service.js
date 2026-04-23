@@ -1,4 +1,34 @@
+const pool = require("../../config/db");
 const conversationRepo = require("../lead_conversations/leadConversations.repository");
+const followupService = require("../followups/followup.service");
+const aiSeller = require("../ai_seller/aiSeller.service");
+const { getSession } = require("../whatsapp_baileys/session.manager");
+
+function canProcess(dealershipId, phone) {
+  const id = Number(dealershipId);
+  if (!Number.isFinite(id) || id < 1) return false;
+  if (phone == null || String(phone).trim().length < 8) return false;
+  return true;
+}
+
+function toWhatsAppJid(phone) {
+  const digits = String(phone).replace(/\D/g, "");
+  if (!digits.length) return null;
+  return `${digits}@s.whatsapp.net`;
+}
+
+async function sendMessage(dealershipId, phone, text) {
+  const sock = getSession(dealershipId);
+  if (!sock) {
+    console.warn(
+      `[whatsapp] Sem sessão Baileys para dealership_id=${dealershipId}; resposta não enviada.`
+    );
+    return;
+  }
+  const jid = toWhatsAppJid(phone);
+  if (!jid) return;
+  await sock.sendMessage(jid, { text });
+}
 
 async function handleIncomingMessage({ dealershipId, phone, text }) {
   try {
@@ -16,8 +46,8 @@ async function handleIncomingMessage({ dealershipId, phone, text }) {
     if (!lead) {
       const insert = await pool.query(
         `INSERT INTO leads
-         (dealership_id, name, phone, status, ai_mode, created_at)
-         VALUES ($1, 'Lead WhatsApp', $2, 'new', 'scheduled', NOW())
+         (dealership_id, name, phone, status, source, ai_mode, created_at)
+         VALUES ($1, 'Lead WhatsApp', $2, 'new', 'whatsapp', 'scheduled', NOW())
          RETURNING *`,
         [dealershipId, phone]
       );
@@ -26,10 +56,6 @@ async function handleIncomingMessage({ dealershipId, phone, text }) {
       await followupService.scheduleLeadFollowups(lead, "full");
     }
 
-    /* =========================
-       SALVA MENSAGEM DO CLIENTE
-    ========================== */
-
     await conversationRepo.saveMessage({
       dealershipId,
       leadId: lead.id,
@@ -37,42 +63,26 @@ async function handleIncomingMessage({ dealershipId, phone, text }) {
       message: text
     });
 
-    /* =========================
-       ATIVA IA SE NECESSÁRIO
-    ========================== */
-
     if (lead.ai_mode === "scheduled") {
       await pool.query(
         `UPDATE leads
          SET ai_mode = 'activating'
-         WHERE id = $1`,
-        [lead.id]
+         WHERE id = $1 AND dealership_id = $2`,
+        [lead.id, dealershipId]
       );
 
       await followupService.cancelLeadFollowups(lead.id);
     }
 
-    /* =========================
-       BUSCA HISTÓRICO
-    ========================== */
-
-    const history = await conversationRepo.getRecentHistory(lead.id, 15);
-
-    /* =========================
-       CHAMA IA COM CONTEXTO
-    ========================== */
-
-    const result = await aiSeller.handleMessage(
+    const history = await conversationRepo.getRecentHistory(
       lead.id,
-      text,
-      history
+      dealershipId,
+      15
     );
 
-    if (!result?.reply) return;
+    const result = await aiSeller.handleMessage(lead.id, text, history);
 
-    /* =========================
-       SALVA RESPOSTA DA IA
-    ========================== */
+    if (!result?.reply) return;
 
     await conversationRepo.saveMessage({
       dealershipId,
@@ -84,17 +94,18 @@ async function handleIncomingMessage({ dealershipId, phone, text }) {
     await pool.query(
       `UPDATE leads
        SET ai_mode = 'active'
-       WHERE id = $1`,
-      [lead.id]
+       WHERE id = $1 AND dealership_id = $2`,
+      [lead.id, dealershipId]
     );
 
-    await sendMessage(
-      dealershipId,
-      phone,
-      result.reply
-    );
-
+    await sendMessage(dealershipId, phone, result.reply);
   } catch (err) {
     console.error("Erro no handleIncomingMessage:", err);
   }
 }
+
+module.exports = {
+  handleIncomingMessage,
+  sendMessage,
+  canProcess
+};

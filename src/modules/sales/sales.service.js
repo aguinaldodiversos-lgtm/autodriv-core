@@ -5,7 +5,7 @@ async function createDraftSale(data) {
 }
 
 async function submitForApproval(saleId, user) {
-  const sale = await repository.getSaleById(saleId);
+  const sale = await repository.getSaleById(saleId, user.dealership_id);
 
   if (!sale) throw new Error("Venda não encontrada");
 
@@ -15,6 +15,7 @@ async function submitForApproval(saleId, user) {
 
   return await repository.updateApprovalStatus(
     saleId,
+    user.dealership_id,
     "pending",
     user.id,
     "Enviado para aprovação"
@@ -22,7 +23,7 @@ async function submitForApproval(saleId, user) {
 }
 
 async function approveSale(saleId, user) {
-  const sale = await repository.getSaleById(saleId);
+  const sale = await repository.getSaleById(saleId, user.dealership_id);
 
   if (!sale) throw new Error("Venda não encontrada");
 
@@ -32,6 +33,7 @@ async function approveSale(saleId, user) {
 
   return await repository.updateApprovalStatus(
     saleId,
+    user.dealership_id,
     "approved",
     user.id,
     "Venda aprovada"
@@ -39,7 +41,7 @@ async function approveSale(saleId, user) {
 }
 
 async function rejectSale(saleId, user, reason) {
-  const sale = await repository.getSaleById(saleId);
+  const sale = await repository.getSaleById(saleId, user.dealership_id);
 
   if (!sale) throw new Error("Venda não encontrada");
 
@@ -49,6 +51,7 @@ async function rejectSale(saleId, user, reason) {
 
   return await repository.updateApprovalStatus(
     saleId,
+    user.dealership_id,
     "rejected",
     user.id,
     reason

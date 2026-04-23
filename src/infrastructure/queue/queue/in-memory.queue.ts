@@ -1,5 +1,5 @@
 import PQueue from "p-queue"
-import { QueueClient, QueueJob } from "./queue.client"
+import { QueueClient, QueueJob } from "../queue.client"
 
 export class InMemoryQueue implements QueueClient {
   private queue = new PQueue({ concurrency: 5 })

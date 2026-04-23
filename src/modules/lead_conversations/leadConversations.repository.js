@@ -9,14 +9,15 @@ async function saveMessage({ dealershipId, leadId, sender, message }) {
   );
 }
 
-async function getRecentHistory(leadId, limit = 15) {
+async function getRecentHistory(leadId, dealershipId, limit = 15) {
   const { rows } = await db.query(
     `SELECT role, message
      FROM lead_conversations
      WHERE lead_id = $1
+       AND dealership_id = $2
      ORDER BY created_at DESC
-     LIMIT $2`,
-    [leadId, limit]
+     LIMIT $3`,
+    [leadId, dealershipId, limit]
   );
 
   return rows.reverse();

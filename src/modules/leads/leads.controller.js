@@ -1,5 +1,6 @@
 const service = require("./leads.service");
 const scoreService = require("./leadScore.service");
+const { parsePagination } = require("../../utils/pagination");
 
 /* =========================
    CRIAR LEAD
@@ -18,7 +19,11 @@ async function create(req, res) {
 ========================= */
 async function list(req, res) {
   try {
-    const leads = await service.listLeads(req.user);
+    const { limit, offset } = parsePagination(req.query, {
+      defaultLimit: 50,
+      maxLimit: 200
+    });
+    const leads = await service.listLeads(req.user, { limit, offset });
     res.json(leads);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -70,10 +75,13 @@ async function reactivate(req, res) {
 
 /* =========================
    CONSULTAR SCORE DO LEAD
+   Contrato GET /api/leads/:id/score (200):
+   { leadId, score, priorityScore, status, messageCount }
+   — valores persistidos + contagem de mensagens na loja (sem modelo ML).
 ========================= */
 async function getScore(req, res) {
   try {
-    const result = await scoreService.getLeadScore(req.params.id);
+    const result = await scoreService.getLeadScore(req.params.id, req.user);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });

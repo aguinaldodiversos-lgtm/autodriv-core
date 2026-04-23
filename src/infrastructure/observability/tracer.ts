@@ -1,12 +1,23 @@
-import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node"
-import { SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base"
-import { ConsoleSpanExporter } from "@opentelemetry/sdk-trace-base"
-import { trace } from "@opentelemetry/api"
+/**
+ * Traços no-op por defeito — evita dependência obrigatória de OpenTelemetry em desenvolvimento.
+ * Substituir por SDK real quando `OTEL_ENABLED=true` e pacotes estiverem instalados.
+ */
+type Span = {
+  setAttribute(_key: string, _value: string | number): void
+  setStatus(_status: { code: number; message?: string }): void
+  recordException(_err: unknown): void
+  end(): void
+}
 
-const provider = new NodeTracerProvider()
-provider.addSpanProcessor(
-  new SimpleSpanProcessor(new ConsoleSpanExporter())
-)
-provider.register()
+const noopSpan: Span = {
+  setAttribute() {},
+  setStatus() {},
+  recordException() {},
+  end() {}
+}
 
-export const tracer = trace.getTracer("aip-core")
+export const tracer = {
+  startSpan(_name: string): Span {
+    return noopSpan
+  }
+}

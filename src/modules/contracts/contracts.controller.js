@@ -5,7 +5,7 @@ const service = require("./contracts.service");
 async function sendForApproval(req, res) {
   try {
     const { id } = req.params;
-    const result = await service.sendForApproval(id);
+    const result = await service.sendForApproval(id, req.user);
     return res.json({ success: true, result });
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
@@ -34,15 +34,14 @@ async function reject(req, res) {
 }
 async function generate(req, res) {
   try {
-    const { saleId } = req.params;
+    const { contractId } = req.params;
 
-    const contract = await service.generateContract(saleId);
+    const contract = await service.generateContract(contractId, req.user);
 
     return res.status(201).json({
       success: true,
       contract
     });
-
   } catch (error) {
     console.error("Erro ao gerar contrato:", error.message);
 

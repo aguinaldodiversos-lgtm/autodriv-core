@@ -2,18 +2,92 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const pkg = require("../package.json");
 
 const localAI = require("./infrastructure/ai/localAI.service");
 
 const app = express();
 
+if (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1") {
+  app.set("trust proxy", 1);
+}
+
 /* =========================
    MIDDLEWARES
 ========================= */
-app.use(cors());
+app.use(helmet());
+
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  : null;
+
+const devLocalOrigin = [
+  /^https?:\/\/localhost(?::\d+)?$/i,
+  /^https?:\/\/127\.0\.0\.1(?::\d+)?$/i
+];
+
+const privateCorsOptions =
+  corsOrigins && corsOrigins.length > 0
+    ? { origin: corsOrigins, credentials: true }
+    : process.env.NODE_ENV === "production"
+      ? { origin: false, credentials: true }
+      : { origin: devLocalOrigin, credentials: true };
+
+function corsMiddleware(req, res, next) {
+  if (req.path.startsWith("/api/public")) {
+    return cors({ origin: true, credentials: false })(req, res, next);
+  }
+  return cors(privateCorsOptions)(req, res, next);
+}
+
+app.use(corsMiddleware);
+
+const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || "900000", 10);
+const readMax = parseInt(process.env.RATE_LIMIT_READ_MAX || "600", 10);
+const authMax = parseInt(process.env.AUTH_RATE_LIMIT_MAX || "30", 10);
+const writeMax = parseInt(process.env.RATE_LIMIT_WRITE_MAX || "120", 10);
+
+const authLimiter = rateLimit({
+  windowMs,
+  max: authMax,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas tentativas. Tente mais tarde." }
+});
+
+const readLimiter = rateLimit({
+  windowMs,
+  max: readMax,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const writeLimiter = rateLimit({
+  windowMs,
+  max: writeMax,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Limite de alterações excedido. Tente mais tarde." }
+});
+
+app.use((req, res, next) => {
+  if (!req.path.startsWith("/api")) return next();
+  if (req.path.startsWith("/api/auth")) return next();
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+    return readLimiter(req, res, next);
+  }
+  return writeLimiter(req, res, next);
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+const authRoutes = require("./modules/auth/auth.routes");
+app.use("/api/auth", authLimiter, authRoutes);
 
 /* =========================
    INICIALIZAÇÃO SEGURA DA IA LOCAL
@@ -34,7 +108,6 @@ initializeLocalAI();
    ROTAS (mapa único: altere só este array)
 ========================= */
 const mountRoutes = [
-  ["/api/auth", require("./modules/auth/auth.routes")],
   ["/api/vehicles", require("./modules/vehicles/vehicles.routes")],
   ["/api/leads", require("./modules/leads/leads.routes")],
   ["/api/dashboard", require("./modules/dashboard/dashboard.routes")],
@@ -94,7 +167,7 @@ app.get("/api", (req, res) => {
     service: pkg.name,
     version: pkg.version,
     description: pkg.description,
-    mounts: mountRoutes.map(([prefix]) => prefix)
+    mounts: ["/api/auth", ...mountRoutes.map(([prefix]) => prefix)]
   });
 });
 

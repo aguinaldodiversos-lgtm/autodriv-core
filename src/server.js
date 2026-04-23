@@ -2,7 +2,9 @@ require("dotenv").config();
 
 const runMigrations = require("./database/migrate");
 const app = require("./app");
-const { startWhatsApp } = require("./modules/whatsapp_baileys/whatsapp.baileys");
+const {
+  startWhatsAppForConfiguredDealerships
+} = require("./modules/whatsapp_baileys/whatsapp.bootstrap");
 const PORT = process.env.PORT || 10000;
 
 async function start() {
@@ -18,7 +20,7 @@ async function start() {
 
       try {
         console.log("📱 Iniciando conexão com WhatsApp...");
-        await startWhatsApp();
+        await startWhatsAppForConfiguredDealerships();
       } catch (err) {
         console.error("❌ Erro ao iniciar WhatsApp:", err);
       }

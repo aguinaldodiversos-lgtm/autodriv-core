@@ -22,13 +22,23 @@ const migrations = [
   require("./migrations/018_ai_settings"),
   require("./migrations/019_fix_subscription_plan"),
   require("./migrations/020_normalize_subscriptions"),
+  require("./migrations/021_lead_profile_fields"),
+  require("./migrations/022_lead_score"),
   require("./migrations/023_vehicle_entry_date"),
   require("./migrations/024_vehicle_fipe"),
   require("./migrations/024_vehicle_featured"),
+  require("./migrations/025_tasks_ai"),
+  require("./migrations/026_whatsapp_instances"),
+  require("./migrations/027_whatsapp_update"),
   require("./migrations/028_contracts"),
   require("./migrations/029_contract_approval"),
   require("./migrations/030_lead_conversations"),
   require("./migrations/031_domain_events"),
+  require("./migrations/032_leads_score_columns"),
+  require("./migrations/033_sales_approval"),
+  require("./migrations/034_event_store_and_snapshots"),
+  require("./migrations/035_lead_ai_followup_step"),
+  require("./migrations/036_leads_whatsapp_followups"),
 ];
 
 async function runMigrations() {

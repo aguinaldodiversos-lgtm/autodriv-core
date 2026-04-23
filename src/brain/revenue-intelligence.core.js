@@ -1,4 +1,4 @@
-// src/brain/revenue-intelligence.core.js
+// CommonJS: avalia vehicle/lead/channel brutos. O .ts homónimo recebe scores já agregados (plataforma TS).
 
 const VehicleCore = require("./vehicle-intelligence.core")
 const LeadCore = require("./lead-intelligence.core")

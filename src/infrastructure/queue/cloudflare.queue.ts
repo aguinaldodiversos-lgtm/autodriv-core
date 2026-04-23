@@ -4,6 +4,15 @@ interface CloudflareQueueBinding {
   send(message: string): Promise<void>
 }
 
+/** Forma mínima compatível com Workers Queue consumer (sem @cloudflare/workers-types). */
+export interface MessageBatch<T = unknown> {
+  messages: Array<{
+    body: string
+    ack(): void
+    retry(): void
+  }>
+}
+
 export class CloudflareQueueAdapter implements QueueClient {
   private handler?: (job: QueueJob) => Promise<void>
 

@@ -7,7 +7,7 @@ export class CreateLeadHandler {
   async execute(command: any) {
     const aggregate = new LeadAggregate(command.leadId)
 
-    aggregate.create(command.name)
+    aggregate.create(command.name, command.tenantId)
 
     await this.repo.save(
       command.leadId,

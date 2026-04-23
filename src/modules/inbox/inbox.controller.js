@@ -1,8 +1,13 @@
 const service = require("./inbox.service");
+const { parsePagination } = require("../../utils/pagination");
 
 async function list(req, res) {
   try {
-    const data = await service.listConversations(req.user);
+    const { limit, offset } = parsePagination(req.query, {
+      defaultLimit: 50,
+      maxLimit: 200
+    });
+    const data = await service.listConversations(req.user, { limit, offset });
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -5,49 +5,34 @@ const repository = require("./contracts.repository");
 const { generatePDF } = require("./contract.generator");
 const path = require("path");
 
-/*
-=====================================================
-UPDATE CONTRACT (COM BLOQUEIO APÓS APROVAÇÃO)
-=====================================================
-*/
-
 async function updateContract(contractId, data, user) {
-  const contract = await repository.findById(contractId);
+  const contract = await repository.findById(contractId, user.dealership_id);
 
   if (!contract) {
     throw new Error("Contrato não encontrado.");
   }
 
-  // 🔒 BLOQUEIO ABSOLUTO APÓS APROVAÇÃO
   if (contract.status === "approved") {
     throw new Error(
       "Contrato aprovado não pode ser editado. Crie uma nova versão."
     );
   }
 
-  // 🔒 BLOQUEIO SE ESTIVER EM APROVAÇÃO
   if (contract.status === "pending_approval") {
     throw new Error(
       "Contrato em aprovação não pode ser editado."
     );
   }
 
-  // 🔐 Permissão mínima (seller, manager ou admin)
   if (!["seller", "manager", "admin"].includes(user.role)) {
     throw new Error("Você não tem permissão para editar contrato.");
   }
 
-  return repository.update(contractId, data);
+  return repository.update(contractId, user.dealership_id, data);
 }
 
-/*
-=====================================================
-ENVIO PARA APROVAÇÃO
-=====================================================
-*/
-
-async function sendForApproval(contractId) {
-  const contract = await repository.findById(contractId);
+async function sendForApproval(contractId, user) {
+  const contract = await repository.findById(contractId, user.dealership_id);
 
   if (!contract) {
     throw new Error("Contrato não encontrado.");
@@ -59,21 +44,21 @@ async function sendForApproval(contractId) {
     );
   }
 
-  return repository.updateStatus(contractId, "pending_approval", null, null);
+  return repository.updateStatus(
+    contractId,
+    user.dealership_id,
+    "pending_approval",
+    null,
+    null
+  );
 }
-
-/*
-=====================================================
-APROVAR CONTRATO
-=====================================================
-*/
 
 async function approveContract(contractId, user) {
   if (!["manager", "admin"].includes(user.role)) {
     throw new Error("Sem permissão para aprovar contrato.");
   }
 
-  const contract = await repository.findById(contractId);
+  const contract = await repository.findById(contractId, user.dealership_id);
 
   if (!contract) {
     throw new Error("Contrato não encontrado.");
@@ -83,21 +68,21 @@ async function approveContract(contractId, user) {
     throw new Error("Contrato não está pendente de aprovação.");
   }
 
-  return repository.updateStatus(contractId, "approved", user.id, null);
+  return repository.updateStatus(
+    contractId,
+    user.dealership_id,
+    "approved",
+    user.id,
+    null
+  );
 }
-
-/*
-=====================================================
-REJEITAR CONTRATO
-=====================================================
-*/
 
 async function rejectContract(contractId, user, reason) {
   if (!["manager", "admin"].includes(user.role)) {
     throw new Error("Sem permissão para rejeitar contrato.");
   }
 
-  const contract = await repository.findById(contractId);
+  const contract = await repository.findById(contractId, user.dealership_id);
 
   if (!contract) {
     throw new Error("Contrato não encontrado.");
@@ -111,35 +96,37 @@ async function rejectContract(contractId, user, reason) {
     throw new Error("Motivo da rejeição é obrigatório.");
   }
 
-  return repository.updateStatus(contractId, "rejected", user.id, reason);
+  return repository.updateStatus(
+    contractId,
+    user.dealership_id,
+    "rejected",
+    user.id,
+    reason
+  );
 }
 
-/*
-=====================================================
-GERAR PDF (SÓ SE APROVADO)
-=====================================================
-*/
-
-async function generateContract(contractId) {
+async function generateContract(contractId, user) {
   const client = await db.connect();
 
   try {
     await client.query("BEGIN");
 
-    const contract = await repository.findById(contractId);
+    const contract = await repository.findById(contractId, user.dealership_id);
 
     if (!contract) {
       throw new Error("Contrato não encontrado.");
     }
 
-    // 🔒 BLOQUEIO: só gera PDF se aprovado
     if (contract.status !== "approved") {
       throw new Error(
         "Contrato precisa estar aprovado para gerar PDF."
       );
     }
 
-    const sale = await repository.findSaleById(contract.sale_id);
+    const sale = await repository.findSaleById(
+      contract.sale_id,
+      user.dealership_id
+    );
 
     if (!sale) {
       throw new Error("Venda vinculada não encontrada.");
@@ -184,7 +171,47 @@ async function generateContract(contractId) {
     await client.query("COMMIT");
 
     return newContract;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
+async function duplicateContract(contractId, user) {
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const contract = await repository.findById(contractId, user.dealership_id);
+
+    if (!contract) {
+      throw new Error("Contrato não encontrado.");
+    }
+
+    if (contract.status !== "approved") {
+      throw new Error(
+        "Somente contratos aprovados podem gerar nova versão."
+      );
+    }
+
+    if (!["seller", "manager", "admin"].includes(user.role)) {
+      throw new Error("Você não tem permissão para duplicar contrato.");
+    }
+
+    const newVersion = await repository.getNextVersion(contract.sale_id, client);
+
+    const newContract = await repository.createDraftFromPrevious(
+      contract,
+      newVersion,
+      client
+    );
+
+    await client.query("COMMIT");
+
+    return newContract;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -198,54 +225,6 @@ module.exports = {
   sendForApproval,
   approveContract,
   rejectContract,
-  generateContract
+  generateContract,
+  duplicateContract
 };
-/*
-=====================================================
-CRIAR NOVA VERSÃO DO CONTRATO (DUPLICAR)
-=====================================================
-*/
-
-async function duplicateContract(contractId, user) {
-  const client = await db.connect();
-
-  try {
-    await client.query("BEGIN");
-
-    const contract = await repository.findById(contractId);
-
-    if (!contract) {
-      throw new Error("Contrato não encontrado.");
-    }
-
-    // 🔒 Só pode duplicar contrato aprovado
-    if (contract.status !== "approved") {
-      throw new Error(
-        "Somente contratos aprovados podem gerar nova versão."
-      );
-    }
-
-    // 🔐 Permissão mínima
-    if (!["seller", "manager", "admin"].includes(user.role)) {
-      throw new Error("Você não tem permissão para duplicar contrato.");
-    }
-
-    const newVersion = contract.version + 1;
-
-    const newContract = await repository.createDraftFromPrevious(
-      contract,
-      newVersion,
-      client
-    );
-
-    await client.query("COMMIT");
-
-    return newContract;
-
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-}

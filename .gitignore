@@ -1,0 +1,13 @@
+node_modules/
+dist-ts/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+coverage/
+.idea/
+.vscode/
+*.swp
+.cursor/

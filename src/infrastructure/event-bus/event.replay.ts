@@ -8,7 +8,7 @@ export class EventReplay {
   ) {}
 
   async replayTenant(tenantId: string) {
-    const events = await this.store.getByTenant(tenantId)
+    const events = await this.store.replayByTenant(tenantId)
 
     for (const event of events) {
       await this.bus.publish(event)

@@ -76,3 +76,13 @@ async function runFollowUp() {
 module.exports = {
   runFollowUp
 };
+
+if (require.main === module) {
+  require("dotenv").config();
+  runFollowUp()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

@@ -23,3 +23,13 @@ async function runDailyAlerts() {
 }
 
 module.exports = runDailyAlerts
+
+if (require.main === module) {
+  require('dotenv').config()
+  runDailyAlerts()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err)
+      process.exit(1)
+    })
+}

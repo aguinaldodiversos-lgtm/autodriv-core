@@ -19,7 +19,7 @@ export class EventRepository {
       await this.db.query({
         text: `
           INSERT INTO event_store
-          (id, aggregate_id, aggregate_type, version, name, payload, tenant_id, occurred_at)
+          (id, aggregate_id, aggregate_type, version, event_name, payload, tenant_id, occurred_at)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
         `,
         params: [
@@ -37,7 +37,7 @@ export class EventRepository {
   }
 
   async load(aggregateId: string) {
-    return this.db.query({
+    const rows = await this.db.query<any>({
       text: `
         SELECT * FROM event_store
         WHERE aggregate_id = $1
@@ -45,5 +45,10 @@ export class EventRepository {
       `,
       params: [aggregateId],
     })
+
+    return rows.map((row) => ({
+      ...row,
+      name: row.event_name ?? row.name,
+    }))
   }
 }

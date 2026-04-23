@@ -8,6 +8,6 @@ const auth = require("../../middlewares/auth");
 router.post("/:id/send-approval", auth, controller.sendForApproval);
 router.post("/:id/approve", auth, controller.approve);
 router.post("/:id/reject", auth, controller.reject);
-router.post("/:saleId/generate", auth, controller.generate);
+router.post("/:contractId/generate", auth, controller.generate);
 
 module.exports = router;

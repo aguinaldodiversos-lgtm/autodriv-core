@@ -8,6 +8,8 @@ export type DomainEventName =
   | "campaign.updated"
   | "snapshot.generated"
   | "premium.ai.requested"
+  | "local.ai.requested"
+  | "engine.degraded"
 
 export interface DomainEvent<T = any> {
   id: string

@@ -1,12 +1,13 @@
 // src/brain/lead-classification.engine.ts
+// Instancia: mesma semantica que src/infrastructure/ai/localAI.service.js (unica fonte).
 
-import { LocalAIService } from "@/infrastructure/ai/local-ai.service"
+type LocalAIPort = typeof import("@/infrastructure/ai/localAI.service")
 
 export class LeadClassificationEngine {
-  constructor(private ai: LocalAIService) {}
+  constructor(private ai: LocalAIPort) {}
 
   async scoreLead(message: string) {
-    const sentiment = await this.ai.classify(message)
+    const sentiment = await this.ai.classify(message, 8000)
 
     const score =
       sentiment[0].label === "POSITIVE"

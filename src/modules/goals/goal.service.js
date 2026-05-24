@@ -1,8 +1,5 @@
 const pool = require("../../config/db");
 
-/* =====================================================
-   CRIAR OU ATUALIZAR META
-===================================================== */
 async function setMonthlyGoal(data, dealershipId) {
   const { user_id, sales_target, revenue_target, month, year } = data;
 
@@ -20,61 +17,52 @@ async function setMonthlyGoal(data, dealershipId) {
   return { success: true };
 }
 
-/* =====================================================
-   CALCULAR PROGRESSO
-===================================================== */
 async function getGoalProgress(dealershipId, month, year) {
-
-  const goals = await pool.query(
-    `SELECT g.*, u.name
+  const { rows } = await pool.query(
+    `WITH sales_month AS (
+       SELECT user_id,
+              COUNT(*)::int AS total_sales,
+              COALESCE(SUM(price), 0)::numeric AS total_revenue
+       FROM sales
+       WHERE dealership_id = $1
+         AND EXTRACT(MONTH FROM created_at) = $2
+         AND EXTRACT(YEAR FROM created_at) = $3
+       GROUP BY user_id
+     )
+     SELECT g.user_id,
+            u.name,
+            g.sales_target,
+            g.revenue_target,
+            COALESCE(sm.total_sales, 0)::int AS total_sales,
+            COALESCE(sm.total_revenue, 0)::numeric AS total_revenue
      FROM monthly_goals g
      JOIN users u ON u.id = g.user_id
+     LEFT JOIN sales_month sm ON sm.user_id = g.user_id
      WHERE g.dealership_id = $1
        AND g.month = $2
        AND g.year = $3`,
     [dealershipId, month, year]
   );
 
-  const results = [];
+  const today = new Date();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const expectedProgress = (today.getDate() / daysInMonth) * 100;
 
-  for (const goal of goals.rows) {
-
-    const salesResult = await pool.query(
-      `SELECT COUNT(*) as total_sales,
-              COALESCE(SUM(s.sale_price),0) as total_revenue
-       FROM sales s
-       WHERE s.dealership_id = $1
-         AND s.user_id = $2
-         AND EXTRACT(MONTH FROM s.created_at) = $3
-         AND EXTRACT(YEAR FROM s.created_at) = $4`,
-      [dealershipId, goal.user_id, month, year]
-    );
-
-    const totalSales = parseInt(salesResult.rows[0].total_sales);
-    const totalRevenue = parseFloat(salesResult.rows[0].total_revenue);
-
-    const salesPercent = goal.sales_target
-      ? (totalSales / goal.sales_target) * 100
-      : 0;
-
-    const revenuePercent = goal.revenue_target
-      ? (totalRevenue / goal.revenue_target) * 100
-      : 0;
-
-    const today = new Date();
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const currentDay = today.getDate();
-
-    const expectedProgress = (currentDay / daysInMonth) * 100;
-
+  return rows.map((goal) => {
+    const totalSales = Number(goal.total_sales || 0);
+    const totalRevenue = Number(goal.total_revenue || 0);
+    const salesTarget = Number(goal.sales_target || 0);
+    const revenueTarget = Number(goal.revenue_target || 0);
+    const salesPercent = salesTarget ? (totalSales / salesTarget) * 100 : 0;
+    const revenuePercent = revenueTarget ? (totalRevenue / revenueTarget) * 100 : 0;
     const status =
       salesPercent < expectedProgress - 15
         ? "below_pace"
         : salesPercent >= 100
-        ? "achieved"
-        : "on_track";
+          ? "achieved"
+          : "on_track";
 
-    results.push({
+    return {
       user_id: goal.user_id,
       seller_name: goal.name,
       sales_target: goal.sales_target,
@@ -84,10 +72,8 @@ async function getGoalProgress(dealershipId, month, year) {
       sales_progress_percent: Number(salesPercent.toFixed(1)),
       revenue_progress_percent: Number(revenuePercent.toFixed(1)),
       status
-    });
-  }
-
-  return results;
+    };
+  });
 }
 
 module.exports = {

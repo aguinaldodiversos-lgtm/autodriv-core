@@ -2,11 +2,78 @@ const pool = require("../../config/db");
 
 async function findById(contractId, dealershipId) {
   const { rows } = await pool.query(
-    `SELECT * FROM contracts
-     WHERE id = $1 AND dealership_id = $2`,
+    `SELECT
+       c.*,
+       s.price,
+       s.payment_method,
+       cl.name AS client_name,
+       cl.phone AS client_phone,
+       v.title AS vehicle_title,
+       v.brand AS vehicle_brand,
+       v.model AS vehicle_model,
+       v.year AS vehicle_year,
+       u.name AS responsible_name
+     FROM contracts c
+     LEFT JOIN sales s
+       ON s.id = c.sale_id
+      AND s.dealership_id = c.dealership_id
+     LEFT JOIN clients cl
+       ON cl.id = s.client_id
+      AND cl.dealership_id = c.dealership_id
+     LEFT JOIN vehicles v
+       ON v.id = s.vehicle_id
+      AND v.dealership_id = c.dealership_id
+     LEFT JOIN users u
+       ON u.id = s.user_id
+     WHERE c.id = $1 AND c.dealership_id = $2`,
     [contractId, dealershipId]
   );
   return rows[0] || null;
+}
+
+async function findAll(dealershipId, filters = {}) {
+  const params = [dealershipId];
+  const where = ["c.dealership_id = $1"];
+
+  if (filters.status) {
+    params.push(filters.status);
+    where.push(`c.status = $${params.length}`);
+  }
+
+  const limit = Math.min(Math.max(Number(filters.limit) || 50, 1), 100);
+  params.push(limit);
+
+  const { rows } = await pool.query(
+    `SELECT
+       c.*,
+       s.price,
+       s.payment_method,
+       cl.name AS client_name,
+       cl.phone AS client_phone,
+       v.title AS vehicle_title,
+       v.brand AS vehicle_brand,
+       v.model AS vehicle_model,
+       v.year AS vehicle_year,
+       u.name AS responsible_name
+     FROM contracts c
+     LEFT JOIN sales s
+       ON s.id = c.sale_id
+      AND s.dealership_id = c.dealership_id
+     LEFT JOIN clients cl
+       ON cl.id = s.client_id
+      AND cl.dealership_id = c.dealership_id
+     LEFT JOIN vehicles v
+       ON v.id = s.vehicle_id
+      AND v.dealership_id = c.dealership_id
+     LEFT JOIN users u
+       ON u.id = s.user_id
+     WHERE ${where.join(" AND ")}
+     ORDER BY c.updated_at DESC NULLS LAST, c.created_at DESC
+     LIMIT $${params.length}`,
+    params
+  );
+
+  return rows;
 }
 
 async function update(contractId, dealershipId, data) {
@@ -155,6 +222,7 @@ async function createDraftFromPrevious(prev, newVersion, client) {
 
 module.exports = {
   findById,
+  findAll,
   update,
   updateStatus,
   findSaleById,

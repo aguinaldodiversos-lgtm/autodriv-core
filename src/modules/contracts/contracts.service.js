@@ -5,6 +5,22 @@ const repository = require("./contracts.repository");
 const { generatePDF } = require("./contract.generator");
 const path = require("path");
 
+async function listContracts(user, filters = {}) {
+  return repository.findAll(user.dealership_id, filters);
+}
+
+async function getContract(contractId, user) {
+  const contract = await repository.findById(contractId, user.dealership_id);
+
+  if (!contract) {
+    const err = new Error("Contrato nao encontrado.");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  return contract;
+}
+
 async function updateContract(contractId, data, user) {
   const contract = await repository.findById(contractId, user.dealership_id);
 
@@ -221,6 +237,8 @@ async function duplicateContract(contractId, user) {
 }
 
 module.exports = {
+  listContracts,
+  getContract,
   updateContract,
   sendForApproval,
   approveContract,

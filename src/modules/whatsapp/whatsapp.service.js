@@ -30,6 +30,34 @@ async function sendMessage(dealershipId, phone, text) {
   await sock.sendMessage(jid, { text });
 }
 
+async function upsertWhatsAppThread(dealershipId, lead, phone) {
+  const externalThreadId = `whatsapp:${String(phone).replace(/\D/g, "")}`;
+  const result = await pool.query(
+    `INSERT INTO inbox_threads
+      (dealership_id, lead_id, channel, external_thread_id, subject,
+       status, assigned_user_id, sla_due_at, last_message_at, unread_count, metadata)
+     VALUES ($1,$2,'whatsapp',$3,$4,'open',$5,NOW() + INTERVAL '1 hour',NOW(),1,$6::jsonb)
+     ON CONFLICT (dealership_id, channel, external_thread_id)
+     WHERE external_thread_id IS NOT NULL
+     DO UPDATE SET
+       lead_id = EXCLUDED.lead_id,
+       status = 'open',
+       last_message_at = NOW(),
+       unread_count = inbox_threads.unread_count + 1,
+       updated_at = NOW()
+     RETURNING *`,
+    [
+      dealershipId,
+      lead.id,
+      externalThreadId,
+      lead.name || lead.client_name || "Lead WhatsApp",
+      lead.assigned_user_id || null,
+      JSON.stringify({ phone })
+    ]
+  );
+  return result.rows[0];
+}
+
 async function handleIncomingMessage({ dealershipId, phone, text }) {
   try {
     if (!canProcess(dealershipId, phone)) return;
@@ -56,10 +84,15 @@ async function handleIncomingMessage({ dealershipId, phone, text }) {
       await followupService.scheduleLeadFollowups(lead, "full");
     }
 
+    const thread = await upsertWhatsAppThread(dealershipId, lead, phone);
+
     await conversationRepo.saveMessage({
       dealershipId,
       leadId: lead.id,
+      inboxThreadId: thread.id,
       sender: "client",
+      channel: "whatsapp",
+      direction: "inbound",
       message: text
     });
 
@@ -80,16 +113,31 @@ async function handleIncomingMessage({ dealershipId, phone, text }) {
       15
     );
 
-    const result = await aiSeller.handleMessage(lead.id, text, history);
+    const result = await aiSeller.handleMessage(lead.id, text, history, {
+      dealershipId
+    });
 
     if (!result?.reply) return;
 
     await conversationRepo.saveMessage({
       dealershipId,
       leadId: lead.id,
+      inboxThreadId: thread.id,
       sender: "ai",
+      channel: "whatsapp",
+      direction: "outbound",
       message: result.reply
     });
+
+    await pool.query(
+      `UPDATE inbox_threads
+       SET status = 'waiting_customer',
+           last_message_at = NOW(),
+           unread_count = 0,
+           updated_at = NOW()
+       WHERE id = $1 AND dealership_id = $2`,
+      [thread.id, dealershipId]
+    );
 
     await pool.query(
       `UPDATE leads

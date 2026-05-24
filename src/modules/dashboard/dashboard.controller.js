@@ -1,4 +1,6 @@
 const pool = require("../../config/db");
+const intelligenceService = require("../intelligence/intelligence.service");
+const operationsDashboardService = require("./operationsDashboard.service");
 
 /* =========================
    MÉTRICAS GERAIS
@@ -191,9 +193,81 @@ async function forecast(req, res) {
   }
 }
 
+/* =========================
+   ACOES INTELIGENTES DE HOJE
+========================= */
+async function intelligenceActions(req, res) {
+  try {
+    const data = await intelligenceService.getTodayIntelligence(req.user);
+
+    res.json({
+      screen: {
+        title: "Acoes inteligentes de hoje",
+        subtitle: "Prioridades geradas com base em leads, conversas, estoque, FIPE, vendas, vendedores e tarefas",
+        feedback: {
+          method: "PATCH",
+          endpoint_template: "/api/intelligence/actions/:id/feedback",
+          accepted_statuses: ["accepted", "ignored"]
+        },
+        outcome: {
+          method: "POST",
+          endpoint_template: "/api/intelligence/actions/:id/outcome",
+          outcome_types: ["sale", "reply", "proposal", "appointment", "repurchase", "no_result"]
+        }
+      },
+      summary_cards: [
+        {
+          key: "critical_actions",
+          label: "Criticas",
+          value: data.summary.critical_actions
+        },
+        {
+          key: "high_actions",
+          label: "Alta prioridade",
+          value: data.summary.high_actions
+        },
+        {
+          key: "hot_leads",
+          label: "Leads quentes",
+          value: data.summary.hot_leads
+        },
+        {
+          key: "stock_alerts",
+          label: "Estoque",
+          value: data.summary.stock_alerts
+        }
+      ],
+      generated_at: data.generated_at,
+      summary: data.summary,
+      actions: data.actions
+    });
+  } catch (err) {
+    console.error("Dashboard intelligence actions error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.statusCode ? err.message : "Erro ao carregar acoes inteligentes"
+    });
+  }
+}
+
+/* =========================
+   COCKPIT OPERACIONAL
+========================= */
+async function operations(req, res) {
+  try {
+    res.json(await operationsDashboardService.getOperationsDashboard(req.user));
+  } catch (err) {
+    console.error("Dashboard operations error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.statusCode ? err.message : "Erro ao carregar cockpit operacional"
+    });
+  }
+}
+
 module.exports = {
   getStats,
   recoveryStats,
   alerts,
-  forecast
+  forecast,
+  intelligenceActions,
+  operations
 };

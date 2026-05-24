@@ -3,6 +3,71 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { JWT_SECRET } = require("../../config/env");
 
+const ROLE_PERMISSIONS = {
+  admin: [
+    "dashboard:view",
+    "clientes:view",
+    "clientes:create",
+    "clientes:update",
+    "leads:view",
+    "leads:create",
+    "leads:update",
+    "veiculos:view",
+    "veiculos:create",
+    "veiculos:update",
+    "contratos:view",
+    "contratos:create",
+    "contratos:update",
+    "financeiro:view",
+    "ia:view",
+    "ia:execute",
+    "settings:view",
+    "settings:update",
+    "users:manage"
+  ],
+  manager: [
+    "dashboard:view",
+    "clientes:view",
+    "clientes:create",
+    "clientes:update",
+    "leads:view",
+    "leads:create",
+    "leads:update",
+    "veiculos:view",
+    "veiculos:create",
+    "veiculos:update",
+    "contratos:view",
+    "contratos:create",
+    "contratos:update",
+    "financeiro:view",
+    "ia:view",
+    "ia:execute",
+    "settings:view"
+  ],
+  seller: [
+    "dashboard:view",
+    "clientes:view",
+    "clientes:create",
+    "clientes:update",
+    "leads:view",
+    "leads:create",
+    "leads:update",
+    "veiculos:view",
+    "contratos:view",
+    "contratos:create",
+    "ia:view",
+    "ia:execute"
+  ],
+  maintenance: [
+    "dashboard:view",
+    "clientes:view",
+    "leads:view",
+    "veiculos:view",
+    "veiculos:update",
+    "ia:view"
+  ]
+};
+
 /** Payload único do sistema (validado em middlewares/auth.js). */
 function generateToken(user) {
   return jwt.sign(
@@ -151,7 +216,57 @@ async function login(req, res) {
   }
 }
 
+async function me(req, res) {
+  try {
+    const userResult = await pool.query(
+      `SELECT id, dealership_id, name, email, role, created_at
+       FROM users
+       WHERE id = $1`,
+      [req.user.id]
+    );
+
+    const user = userResult.rows[0];
+    if (!user) {
+      return res.status(401).json({ error: "Usuario nao encontrado" });
+    }
+
+    const dealershipResult = await pool.query(
+      `SELECT id, name, email, phone, created_at
+       FROM dealerships
+       WHERE id = $1`,
+      [user.dealership_id]
+    );
+
+    const subscriptionResult = await pool.query(
+      `SELECT id, plan, status, current_period_end, updated_at
+       FROM subscriptions
+       WHERE dealership_id = $1
+       ORDER BY id DESC
+       LIMIT 1`,
+      [user.dealership_id]
+    );
+
+    res.json({
+      user: {
+        id: user.id,
+        dealership_id: user.dealership_id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        created_at: user.created_at
+      },
+      dealership: dealershipResult.rows[0] || null,
+      subscription: subscriptionResult.rows[0] || null,
+      permissions: ROLE_PERMISSIONS[user.role] || []
+    });
+  } catch (err) {
+    console.error("Erro ao obter sessao:", err);
+    res.status(500).json({ error: "Erro ao obter sessao" });
+  }
+}
+
 module.exports = {
   register,
-  login
+  login,
+  me
 };

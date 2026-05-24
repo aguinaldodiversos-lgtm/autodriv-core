@@ -64,7 +64,9 @@ async function handleIncomingMessage(sock, jid, text) {
   /* =========================
      ENVIA PARA IA
   ========================== */
-  const resultAI = await aiSeller.handleMessage(lead.id, text);
+  const resultAI = await aiSeller.handleMessage(lead.id, text, [], {
+    dealershipId
+  });
 
   /* =========================
      RESPONDE NO WHATSAPP

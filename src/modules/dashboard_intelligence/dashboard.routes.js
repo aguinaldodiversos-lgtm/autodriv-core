@@ -1,8 +1,15 @@
 const express = require("express")
 const router = express.Router()
 const GeneralManagerAI = require("../../brain/general-manager.ai")
+const auth = require("../../middlewares/auth")
 
-router.get("/executive/:tenantId", async (req, res) => {
+const requireDashboardAccess = [
+  auth,
+  auth.requireRoles("admin", "manager"),
+  auth.requireSameDealershipParam("tenantId")
+]
+
+router.get("/executive/:tenantId", requireDashboardAccess, async (req, res) => {
   try {
     const gm = new GeneralManagerAI()
     const report = await gm.generateDailyExecutiveReport(
@@ -17,7 +24,7 @@ router.get("/executive/:tenantId", async (req, res) => {
   }
 })
 
-router.get("/global/:tenantId", async (req, res) => {
+router.get("/global/:tenantId", requireDashboardAccess, async (req, res) => {
   try {
     const tenantId = req.params.tenantId
 

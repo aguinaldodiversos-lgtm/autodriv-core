@@ -2,7 +2,7 @@ const repo = require("./finance.repository");
 
 async function createTransaction(data, user) {
   return repo.create({
-    dealership_id: user.dealershipId,
+    dealership_id: user.dealership_id,
     type: data.type,
     category: data.category,
     description: data.description,
@@ -14,15 +14,15 @@ async function createTransaction(data, user) {
 }
 
 async function listTransactions(user) {
-  return repo.findAll(user.dealershipId);
+  return repo.findAll(user.dealership_id);
 }
 
 async function payTransaction(id, user) {
-  return repo.markAsPaid(id, user.dealershipId);
+  return repo.markAsPaid(id, user.dealership_id);
 }
 
 async function getFinanceSummary(user) {
-  return repo.getSummary(user.dealershipId);
+  return repo.getSummary(user.dealership_id);
 }
 
 module.exports = {

@@ -10,6 +10,26 @@ function requireEnv(name) {
   return String(v).trim();
 }
 
+const CORS_PRIVATE_SENTINELS = new Set([
+  "server-to-server",
+  "private",
+  "none",
+  "disabled",
+  "false"
+]);
+
+function parseCorsOrigins(raw = process.env.CORS_ORIGIN) {
+  if (!raw || !String(raw).trim()) return null;
+
+  const value = String(raw).trim();
+  if (CORS_PRIVATE_SENTINELS.has(value.toLowerCase())) return null;
+
+  return value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
 const DATABASE_URL = requireEnv("DATABASE_URL");
 const JWT_SECRET_RAW = requireEnv("JWT_SECRET");
 if (JWT_SECRET_RAW.length < 32) {
@@ -18,18 +38,10 @@ if (JWT_SECRET_RAW.length < 32) {
   );
 }
 
-if (process.env.NODE_ENV === "production") {
-  const co = process.env.CORS_ORIGIN;
-  if (!co || !String(co).trim()) {
-    throw new Error(
-      "[config] Em produção defina CORS_ORIGIN com origens permitidas (lista separada por vírgulas). " +
-        "API só com servidor-a-servidor: use um valor sentinela e não exponha o browser à API privada."
-    );
-  }
-}
-
 module.exports = {
   PORT: parseInt(process.env.PORT || "3000", 10),
   DATABASE_URL,
-  JWT_SECRET: JWT_SECRET_RAW
+  JWT_SECRET: JWT_SECRET_RAW,
+  REDIS_URL: process.env.REDIS_URL ? String(process.env.REDIS_URL).trim() : null,
+  parseCorsOrigins
 };

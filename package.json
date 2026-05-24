@@ -1,22 +1,29 @@
 {
   "name": "aip-core",
   "version": "2.0.0",
-  "description": "AIP - Automotive Intelligence Platform. API principal: npm start (Express). npm run start:platform = stack TS experimental (eventos/orquestração), sem paridade 1:1 com todas as rotas Express.",
+  "description": "AIP - Automotive Intelligence Platform. API: npm start (Express). Entrada e lista de rotas: docs/ENTRYPOINTS.md e npm run start:info. Rasto TS (app/server.ts) experimental.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
+    "start:info": "node scripts/print-start-surface.js",
+    "brain:scan": "node scripts/scan-brain-usage.js",
     "dev": "node src/server.js",
     "check": "node -e \"console.log('package ok')\"",
+    "migrate": "node src/database/migrate.js",
+    "migrate:baseline": "node scripts/migrate-baseline.js",
+    "check:js": "node scripts/check-js.js",
     "typecheck": "tsc --noEmit",
-    "ci:static": "npm run typecheck",
-    "ci": "npm run typecheck && node scripts/ci-migrate-and-tenant-check.js",
+    "ci:static": "npm run check:js && npm run typecheck",
+    "ci": "npm run check:js && npm run typecheck && node scripts/ci-migrate-and-tenant-check.js",
     "verify:env": "node scripts/verify-env.js",
-    "start:platform": "tsx src/app/server.ts",
+    "start:platform": "node scripts/start-platform-disabled.js",
     "smoke:critical": "node scripts/smoke-critical.js",
+    "ai:warmup": "node src/workers/local-ai.worker.js",
+    "worker:whatsapp": "node src/workers/whatsapp.worker.js",
     "worker:followup": "node src/workers/followup.worker.js",
     "worker:daily-alert": "node src/workers/daily-alert.worker.js",
     "worker:queue": "node src/workers/queue.worker.js",
-    "test": "node --test test/*.test.js"
+    "test": "node scripts/run-tests.js"
   },
   "engines": {
     "node": ">=20 <21"
@@ -34,7 +41,6 @@
     "express": "^4.19.2",
     "express-rate-limit": "^8.3.2",
     "helmet": "^8.1.0",
-    "hono": "^4.12.14",
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",

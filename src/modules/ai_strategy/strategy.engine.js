@@ -1,8 +1,16 @@
 const OpenAI = require("openai");
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+let client = null;
+
+function getClient() {
+  if (!client) {
+    client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
+  }
+
+  return client;
+}
 
 async function generateStrategyReport(data) {
 
@@ -21,7 +29,7 @@ Responda em formato:
 - Prioridade (Alta, Média ou Baixa)
 `;
 
-  const response = await client.chat.completions.create({
+  const response = await getClient().chat.completions.create({
     model: "gpt-4.1-mini",
     messages: [{ role: "user", content: prompt }],
     temperature: 0.5,

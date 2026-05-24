@@ -6,7 +6,7 @@ async function publishToCarrosNaCidade(vehicleId, user) {
   const vehicleResult = await pool.query(
     `SELECT * FROM vehicles
      WHERE id = $1 AND dealership_id = $2`,
-    [vehicleId, user.dealershipId]
+    [vehicleId, user.dealership_id]
   );
 
   const vehicle = vehicleResult.rows[0];
@@ -23,7 +23,7 @@ async function publishToCarrosNaCidade(vehicleId, user) {
   const external = await cncAdapter.publishVehicle(vehicle, images);
 
   const integration = await repo.create({
-    dealership_id: user.dealershipId,
+    dealership_id: user.dealership_id,
     vehicle_id: vehicleId,
     platform: "carros_na_cidade",
     external_id: external.id,

@@ -1,9 +1,17 @@
 const OpenAI = require("openai");
 const db = require("../../config/db");
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+let openai = null;
+
+function getOpenAIClient() {
+  if (!openai) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
+  }
+
+  return openai;
+}
 
 /* =====================================================
    CONFIGURAÇÕES
@@ -12,6 +20,12 @@ const openai = new OpenAI({
 const MODEL = "gpt-4o-mini"; // econômico e eficiente
 const MAX_HISTORY_MESSAGES = 15;
 const MAX_RESPONSE_TOKENS = 300;
+
+function httpError(message, statusCode) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
 
 /* =====================================================
    PROMPT BASE DO VENDEDOR IA
@@ -55,10 +69,15 @@ function estimateTokens(text) {
    HANDLE MESSAGE (COM HISTÓRICO)
 ===================================================== */
 
-async function handleMessage(leadId, message, history = []) {
+async function handleMessage(leadId, message, history = [], context = {}) {
   try {
     if (!leadId || !message) {
       return { reply: null };
+    }
+
+    const dealershipId = Number(context.dealershipId);
+    if (!Number.isFinite(dealershipId) || dealershipId <= 0) {
+      throw httpError("Loja nÃ£o informada", 403);
     }
 
     /* =========================
@@ -68,12 +87,15 @@ async function handleMessage(leadId, message, history = []) {
     const { rows } = await db.query(
       `SELECT dealership_id, name
        FROM leads
-       WHERE id = $1`,
-      [leadId]
+       WHERE id = $1
+         AND dealership_id = $2`,
+      [leadId, dealershipId]
     );
 
     const lead = rows[0];
-    if (!lead) return { reply: null };
+    if (!lead) {
+      throw httpError("Lead nÃ£o encontrado", 404);
+    }
 
     /* =========================
        CONSTRUIR MENSAGENS
@@ -109,7 +131,7 @@ async function handleMessage(leadId, message, history = []) {
        CHAMADA OPENAI
     ========================== */
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: MODEL,
       messages,
       temperature: 0.7,
@@ -141,8 +163,9 @@ async function handleMessage(leadId, message, history = []) {
         `UPDATE leads
          SET last_ai_tokens = $1,
              updated_at = NOW()
-         WHERE id = $2`,
-        [totalTokens, leadId]
+         WHERE id = $2
+           AND dealership_id = $3`,
+        [totalTokens, leadId, dealershipId]
       );
     } catch (err) {
       // Não quebrar fluxo se métrica falhar
@@ -155,6 +178,10 @@ async function handleMessage(leadId, message, history = []) {
     };
 
   } catch (error) {
+    if (context.strict && error.statusCode) {
+      throw error;
+    }
+
     console.error("Erro no aiSeller.handleMessage:", error);
 
     return {

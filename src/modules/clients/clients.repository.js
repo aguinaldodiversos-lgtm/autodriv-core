@@ -3,8 +3,9 @@ const pool = require("../../config/db");
 async function create(client) {
   const result = await pool.query(
     `INSERT INTO clients
-     (dealership_id, name, phone, email, cpf_cnpj, notes)
-     VALUES ($1,$2,$3,$4,$5,$6)
+     (dealership_id, name, phone, email, cpf_cnpj, notes,
+      birth_date, preferred_contact_channel, tags)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)
      RETURNING *`,
     [
       client.dealership_id,
@@ -12,7 +13,10 @@ async function create(client) {
       client.phone,
       client.email,
       client.cpf_cnpj,
-      client.notes
+      client.notes,
+      client.birth_date || null,
+      client.preferred_contact_channel || null,
+      JSON.stringify(client.tags || [])
     ]
   );
 
@@ -47,8 +51,11 @@ async function update(id, dealershipId, data) {
          phone=$2,
          email=$3,
          cpf_cnpj=$4,
-         notes=$5
-     WHERE id=$6 AND dealership_id=$7
+         notes=$5,
+         birth_date=$6,
+         preferred_contact_channel=$7,
+         tags=$8::jsonb
+     WHERE id=$9 AND dealership_id=$10
      RETURNING *`,
     [
       data.name,
@@ -56,6 +63,9 @@ async function update(id, dealershipId, data) {
       data.email,
       data.cpf_cnpj,
       data.notes,
+      data.birth_date || null,
+      data.preferred_contact_channel || null,
+      JSON.stringify(data.tags || []),
       id,
       dealershipId
     ]

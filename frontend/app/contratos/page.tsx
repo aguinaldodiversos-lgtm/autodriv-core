@@ -70,8 +70,8 @@ export default function ContratosPage() {
           <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">Carregando contratos...</div>
         ) : filteredContratos.length === 0 ? (
           <EmptyState
-            title="Listagem de contratos pendente no backend"
-            description="O backend atual possui endpoints de ações por contrato, mas ainda não expõe uma rota de listagem GET /api/contracts. O TODO técnico está registrado no mapa frontend-backend."
+            title="Nenhum contrato encontrado"
+            description="Quando houver contratos gerados ou enviados para aprovação, eles aparecerão aqui com cliente, valor, status e responsável."
             icon={<FileText className="h-6 w-6" />}
           />
         ) : (
@@ -79,6 +79,7 @@ export default function ContratosPage() {
             columns={[
               { key: "sale_id", header: "Contrato", render: (row) => (row.sale_id ? `Venda #${row.sale_id}` : `Contrato #${row.id}`) },
               { key: "client_name", header: "Cliente", render: (row) => row.client_name ?? "-" },
+              { key: "vehicle_title", header: "Veículo", render: (row) => row.vehicle_title ?? ([row.vehicle_brand, row.vehicle_model].filter(Boolean).join(" ") || "-") },
               { key: "status", header: "Status", render: (row) => <Badge variant="neutral">{row.status}</Badge> },
               { key: "price", header: "Valor", render: (row) => formatCurrency(row.price ?? row.amount) },
               { key: "responsible_name", header: "Responsável", render: (row) => row.responsible_name ?? "Sem responsável" },

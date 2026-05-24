@@ -1,29 +1,40 @@
 const pool = require("../../config/db");
 
-async function create(vehicleId, imageUrl, isMain = false) {
+/**
+ * Só cria registo se o veículo existir e pertencer à loja.
+ */
+async function insertForVehicleInDealership(vehicleId, imageUrl, isMain, dealershipId) {
   const result = await pool.query(
     `INSERT INTO vehicle_images
-     (vehicle_id, image_url, is_main)
-     VALUES ($1,$2,$3)
+       (vehicle_id, image_url, is_main)
+     SELECT v.id, $2::text, $3::boolean
+     FROM vehicles v
+     WHERE v.id = $1::int
+       AND v.dealership_id = $4::int
      RETURNING *`,
-    [vehicleId, imageUrl, isMain]
+    [vehicleId, imageUrl, isMain, dealershipId]
   );
-
-  return result.rows[0];
+  return result.rows[0] || null;
 }
 
-async function list(vehicleId) {
+/**
+ * Listagem: junta a vehicles para reforçar o escopo.
+ */
+async function listByVehicleInDealership(vehicleId, dealershipId) {
   const result = await pool.query(
-    `SELECT * FROM vehicle_images
-     WHERE vehicle_id = $1
-     ORDER BY is_main DESC, sort_order ASC`,
-    [vehicleId]
+    `SELECT vi.*
+     FROM vehicle_images vi
+     INNER JOIN vehicles v
+       ON v.id = vi.vehicle_id
+      AND v.dealership_id = $2
+     WHERE vi.vehicle_id = $1
+     ORDER BY vi.is_main DESC, vi.sort_order ASC`,
+    [vehicleId, dealershipId]
   );
-
   return result.rows;
 }
 
 module.exports = {
-  create,
-  list
+  insertForVehicleInDealership,
+  listByVehicleInDealership
 };

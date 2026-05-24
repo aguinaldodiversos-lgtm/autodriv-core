@@ -8,7 +8,7 @@ async function distribute(req, res) {
       return res.status(400).json({ error: "leadId é obrigatório" });
     }
 
-    const userId = await service.distributeLead(leadId);
+    const userId = await service.distributeLead(leadId, req.user.dealership_id);
 
     res.json({
       success: true,
@@ -16,6 +16,11 @@ async function distribute(req, res) {
     });
 
   } catch (err) {
+    if (err && err.statusCode) {
+      return res
+        .status(err.statusCode)
+        .json({ error: err.message || "Erro" });
+    }
     console.error(err);
     res.status(500).json({ error: "Erro ao distribuir lead" });
   }
@@ -28,8 +33,12 @@ async function getAdminLeads(req, res) {
     const leads = await service.getAdminLeadList(dealershipId);
 
     res.json(leads);
-
   } catch (err) {
+    if (err && err.statusCode) {
+      return res
+        .status(err.statusCode)
+        .json({ error: err.message || "Erro" });
+    }
     console.error(err);
     res.status(500).json({ error: "Erro ao listar leads" });
   }

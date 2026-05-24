@@ -1,85 +1,197 @@
 const pool = require("../config/db");
-const convoRepo = require("../modules/lead_conversations/leadConversations.repository");
+const conversationRepo = require("../modules/lead_conversations/leadConversations.repository");
+const { getSession } = require("../modules/whatsapp_baileys/session.manager");
 
-function getFollowUpMessage(step) {
-  const messages = {
-    1: "Conseguiu ver as informações do carro? Se quiser, posso te mostrar ele com calma aqui na loja.",
-    2: "Esse modelo tem bastante procura e costuma agradar quem busca economia e conforto. Vale a pena ver pessoalmente. Você consegue passar hoje no fim da tarde ou prefere amanhã?",
-    3: "Bom dia! Ontem você falou sobre o carro. Conseguiu ver com calma? Se quiser, pode passar aqui na loja para olhar sem compromisso. Prefere vir hoje ou amanhã?",
-    4: "Passando para te avisar que o carro ainda está disponível. Quem procura esse tipo de modelo costuma decidir rápido. Você consegue passar hoje ou prefere outro dia?",
-    5: "Oi! Tudo bem? Ainda está procurando carro ou já resolveu por aí? Se quiser, pode passar aqui na loja para ver algumas opções com calma.",
-    6: "Essa semana chegaram alguns carros que podem te interessar. Se quiser, pode passar aqui pra dar uma olhada sem compromisso. Prefere vir durante a semana ou no sábado?",
-    7: "Oi! Só passando para saber se você ainda está procurando carro. Posso separar algumas opções no seu perfil para você ver aqui na loja.",
-    8: "Olá! Ainda está pensando em trocar de carro? Chegaram algumas opções bem interessantes aqui na loja. Se quiser, passa aqui pra ver com calma e tomar um café com a gente."
-  };
+const DEFAULT_BATCH_SIZE = 50;
+const LOCK_TIMEOUT_MINUTES = 10;
+const DEFAULT_INTERVAL_MS = 60000;
 
-  return messages[step] || null;
+function getBatchSize() {
+  const parsed = parseInt(
+    process.env.FOLLOWUP_BATCH_SIZE || String(DEFAULT_BATCH_SIZE),
+    10
+  );
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_BATCH_SIZE;
 }
 
-async function runFollowUp() {
-  console.log("🔁 Rodando follow-up automático...");
+async function claimDueFollowups(limit) {
+  const client = await pool.connect();
 
-  const leads = await pool.query(`
-    SELECT
-      l.id AS lead_id,
-      l.dealership_id,
-      s.followup_step,
-      MAX(c.created_at) AS last_message_at
-    FROM leads l
-    JOIN lead_ai_state s ON s.lead_id = l.id
-    LEFT JOIN lead_conversations c ON c.lead_id = l.id
-    GROUP BY l.id, s.followup_step
-  `);
+  try {
+    await client.query("BEGIN");
 
-  for (const lead of leads.rows) {
-    if (!lead.last_message_at) continue;
-
-    const lastMsg = new Date(lead.last_message_at);
-    const now = new Date();
-    const diffHours = (now - lastMsg) / (1000 * 60 * 60);
-
-    let nextStep = null;
-
-    if (lead.followup_step === 0 && diffHours >= 0.3) nextStep = 1; // 20 min
-    else if (lead.followup_step === 1 && diffHours >= 3) nextStep = 2;
-    else if (lead.followup_step === 2 && diffHours >= 24) nextStep = 3;
-    else if (lead.followup_step === 3 && diffHours >= 72) nextStep = 4;
-    else if (lead.followup_step === 4 && diffHours >= 120) nextStep = 5;
-    else if (lead.followup_step === 5 && diffHours >= 168) nextStep = 6;
-    else if (lead.followup_step === 6 && diffHours >= 336) nextStep = 7;
-    else if (lead.followup_step === 7 && diffHours >= 720) nextStep = 8;
-
-    if (!nextStep) continue;
-
-    const message = getFollowUpMessage(nextStep);
-    if (!message) continue;
-
-    await convoRepo.addMessage({
-      dealership_id: lead.dealership_id,
-      lead_id: lead.lead_id,
-      role: "ai",
-      message
-    });
-
-    await pool.query(
-      `UPDATE lead_ai_state
-       SET followup_step = $2,
-           updated_at = NOW()
-       WHERE lead_id = $1`,
-      [lead.lead_id, nextStep]
+    const { rows } = await client.query(
+      `
+      SELECT
+        f.id,
+        f.dealership_id,
+        f.lead_id,
+        f.message,
+        f.scheduled_at,
+        COALESCE(l.phone, l.client_phone) AS phone
+      FROM lead_followups f
+      JOIN leads l
+        ON l.id = f.lead_id
+       AND l.dealership_id = f.dealership_id
+      WHERE f.sent_at IS NULL
+        AND f.scheduled_at <= NOW()
+        AND (
+          f.locked_at IS NULL
+          OR f.locked_at < NOW() - ($2::int * INTERVAL '1 minute')
+        )
+      ORDER BY f.scheduled_at ASC, f.id ASC
+      LIMIT $1
+      FOR UPDATE SKIP LOCKED
+      `,
+      [limit, LOCK_TIMEOUT_MINUTES]
     );
 
-    console.log(`📩 Follow-up step ${nextStep} enviado para lead ${lead.lead_id}`);
+    if (rows.length) {
+      await client.query(
+        `
+        UPDATE lead_followups
+        SET locked_at = NOW(),
+            attempts = COALESCE(attempts, 0) + 1,
+            updated_at = NOW()
+        WHERE id = ANY($1::int[])
+        `,
+        [rows.map((row) => row.id)]
+      );
+    }
+
+    await client.query("COMMIT");
+    return rows;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
 }
 
+async function markSent(followupId) {
+  await pool.query(
+    `
+    UPDATE lead_followups
+    SET sent_at = NOW(),
+        locked_at = NULL,
+        last_error = NULL,
+        updated_at = NOW()
+    WHERE id = $1
+    `,
+    [followupId]
+  );
+}
+
+async function markFailed(followupId, err) {
+  await pool.query(
+    `
+    UPDATE lead_followups
+    SET locked_at = NULL,
+        last_error = $2,
+        updated_at = NOW()
+    WHERE id = $1
+    `,
+    [followupId, (err && err.message ? err.message : String(err)).slice(0, 500)]
+  );
+}
+
+function toWhatsAppJid(phone) {
+  const digits = String(phone).replace(/\D/g, "");
+  return digits ? `${digits}@s.whatsapp.net` : null;
+}
+
+async function sendWhatsAppMessage(dealershipId, phone, message) {
+  const sock = getSession(dealershipId);
+  const jid = toWhatsAppJid(phone);
+
+  if (!sock || !jid) return;
+
+  await sock.sendMessage(jid, { text: message });
+}
+
+async function deliverFollowup(followup) {
+  await conversationRepo.saveMessage({
+    dealershipId: followup.dealership_id,
+    leadId: followup.lead_id,
+    sender: "ai",
+    message: followup.message
+  });
+
+  if (followup.phone) {
+    await sendWhatsAppMessage(
+      followup.dealership_id,
+      followup.phone,
+      followup.message
+    );
+  }
+
+  await markSent(followup.id);
+}
+
+async function runFollowUp() {
+  const due = await claimDueFollowups(getBatchSize());
+  let sent = 0;
+  let failed = 0;
+
+  for (const followup of due) {
+    try {
+      await deliverFollowup(followup);
+      sent++;
+    } catch (err) {
+      failed++;
+      await markFailed(followup.id, err);
+      console.error(`[followup] Falha ao enviar ${followup.id}:`, err);
+    }
+  }
+
+  console.log(`[followup] Processados=${due.length} enviados=${sent} falhas=${failed}`);
+
+  return { processed: due.length, sent, failed };
+}
+
+function getIntervalMs() {
+  const parsed = parseInt(
+    process.env.FOLLOWUP_INTERVAL_MS || String(DEFAULT_INTERVAL_MS),
+    10
+  );
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_INTERVAL_MS;
+}
+
+async function startFollowupWorker() {
+  const once = process.env.FOLLOWUP_RUN_ONCE === "true";
+
+  await runFollowUp();
+  if (once) return;
+
+  const intervalMs = getIntervalMs();
+  const timer = setInterval(() => {
+    runFollowUp().catch((err) => {
+      console.error(err);
+    });
+  }, intervalMs);
+
+  const shutdown = () => {
+    clearInterval(timer);
+    process.exit(0);
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
+  return new Promise(() => {});
+}
+
 module.exports = {
-  runFollowUp
+  runFollowUp,
+  claimDueFollowups,
+  deliverFollowup,
+  startFollowupWorker
 };
 
 if (require.main === module) {
   require("dotenv").config();
-  runFollowUp()
+  startFollowupWorker()
     .then(() => process.exit(0))
     .catch((err) => {
       console.error(err);

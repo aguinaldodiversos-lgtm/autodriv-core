@@ -8,7 +8,7 @@ on:
 
 jobs:
   typecheck:
-    name: TypeScript
+    name: Static JS + TypeScript
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +17,7 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci
+      - run: npm run check:js
       - run: npm run typecheck
 
   integration:
@@ -36,10 +37,20 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     env:
       NODE_ENV: development
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/autodriv_ci
+      REDIS_URL: redis://localhost:6379
       JWT_SECRET: "01234567890123456789012345678901"
 
     steps:
@@ -49,5 +60,6 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci
+      - run: npm run check:js
       - run: node scripts/ci-migrate-and-tenant-check.js
       - run: npm test

@@ -8,6 +8,7 @@ if (!process.env.REDIS_URL) {
   console.error("REDIS_URL é obrigatório para o worker de fila.");
   process.exit(1);
 }
+// Jobs processados: `ping` (dev). Outros: skipped. A fila usa defaultJobOptions (retry) em default.queue.
 
 const connection = new IORedis(process.env.REDIS_URL, {
   maxRetriesPerRequest: null,

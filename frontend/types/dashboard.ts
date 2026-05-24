@@ -15,6 +15,8 @@ export type IntelligenceAction = {
   suggested_action: string;
   entity_type?: string | null;
   entity_id?: number | null;
+  explanation?: string | null;
+  status?: "pending" | "accepted" | "ignored";
 };
 
 export type InboxConversation = {

@@ -70,16 +70,22 @@ async function getTasks(orderId) {
   return result.rows;
 }
 
-async function updateTaskStatus(taskId, status) {
+/**
+ * Só altera tarefa se a ordem pertencer à loja.
+ */
+async function updateTaskStatusForDealership(taskId, status, dealershipId) {
   const result = await pool.query(
-    `UPDATE maintenance_tasks
+    `UPDATE maintenance_tasks t
      SET status = $1
-     WHERE id = $2
-     RETURNING *`,
-    [status, taskId]
+     FROM maintenance_orders o
+     WHERE t.id = $2::int
+       AND t.order_id = o.id
+       AND o.dealership_id = $3::int
+     RETURNING t.*`,
+    [status, taskId, dealershipId]
   );
 
-  return result.rows[0];
+  return result.rows[0] || null;
 }
 
 module.exports = {
@@ -88,5 +94,5 @@ module.exports = {
   updateOrderStatus,
   createTask,
   getTasks,
-  updateTaskStatus
+  updateTaskStatusForDealership
 };

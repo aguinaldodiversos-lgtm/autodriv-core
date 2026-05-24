@@ -10,11 +10,17 @@ async function message(req, res) {
       });
     }
 
-    const data = await service.handleMessage(lead_id, message);
+    const data = await service.handleMessage(lead_id, message, [], {
+      dealershipId: req.user.dealership_id,
+      strict: true
+    });
     res.json(data);
   } catch (err) {
-    console.error("AI SELLER ERROR:", err);
-    res.status(500).json({ error: err.message });
+    const status = err.statusCode || 500;
+    if (status >= 500) {
+      console.error("AI SELLER ERROR:", err);
+    }
+    res.status(status).json({ error: err.message });
   }
 }
 

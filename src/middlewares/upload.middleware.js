@@ -3,6 +3,40 @@ const path = require("path");
 const os = require("os");
 const fs = require("fs");
 
+const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
+
+function getVehicleImageMaxBytes() {
+  const raw = process.env.VEHICLE_IMAGE_MAX_BYTES;
+  if (!raw) return DEFAULT_MAX_BYTES;
+  const n = parseInt(String(raw), 10);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_MAX_BYTES;
+}
+
+function imageMimeFilter(_req, file, cb) {
+  const m = (file.mimetype || "").toLowerCase();
+  const allowed =
+    m === "image/jpeg" ||
+    m === "image/jpg" ||
+    m === "image/pjpeg" ||
+    m === "image/png" ||
+    m === "image/webp";
+  if (allowed) {
+    return cb(null, true);
+  }
+  cb(
+    new Error(
+      "Tipo de arquivo não permitido. Use JPEG, PNG ou WebP (image/jpeg, image/png, image/webp)"
+    )
+  );
+}
+
+function multerLimits() {
+  return {
+    fileSize: getVehicleImageMaxBytes(),
+    files: 1
+  };
+}
+
 function cloudinaryEnvOk() {
   return Boolean(
     process.env.CLOUDINARY_CLOUD_NAME &&
@@ -32,7 +66,11 @@ function buildMulter() {
           allowed_formats: ["jpg", "jpeg", "png", "webp"]
         }
       });
-      return multer({ storage });
+      return multer({
+        storage,
+        limits: multerLimits(),
+        fileFilter: imageMimeFilter
+      });
     } catch (err) {
       console.warn(
         "[upload] Falha ao configurar Cloudinary — usando disco temporário:",
@@ -61,7 +99,11 @@ function buildMulter() {
     }
   });
 
-  return multer({ storage });
+  return multer({
+    storage,
+    limits: multerLimits(),
+    fileFilter: imageMimeFilter
+  });
 }
 
 module.exports = buildMulter();

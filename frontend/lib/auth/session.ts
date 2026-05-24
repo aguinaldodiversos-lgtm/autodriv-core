@@ -1,10 +1,12 @@
 "use client";
 
-import type { Session, SessionUser } from "@/types/auth";
+import type { AuthMeResponse, Session, SessionUser } from "@/types/auth";
+import type { Permission } from "./permissions";
 import { normalizeRole } from "./roles";
 
 const TOKEN_KEY = "autodriv_token";
 const USER_KEY = "autodriv_user";
+const PERMISSIONS_KEY = "autodriv_permissions";
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
   const [, payload] = token.split(".");
@@ -28,12 +30,27 @@ function userFromToken(token: string): SessionUser {
   }
 }
 
-export function saveSession(token: string) {
-  const user = userFromToken(token);
+function normalizeUser(user: SessionUser): SessionUser {
+  return { ...user, role: normalizeRole(user.role) };
+}
+
+export function saveSession(token: string, profile?: AuthMeResponse) {
+  const user = profile
+    ? normalizeUser({
+        id: profile.user.id,
+        email: profile.user.email,
+        role: normalizeRole(profile.user.role),
+        dealership_id: profile.user.dealership_id
+      })
+    : userFromToken(token);
+
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
+  if (profile?.permissions) {
+    localStorage.setItem(PERMISSIONS_KEY, JSON.stringify(profile.permissions));
+  }
   document.cookie = `${TOKEN_KEY}=${token}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
-  return { token, user };
+  return { token, user, permissions: profile?.permissions };
 }
 
 export function getSession(): Session | null {
@@ -41,8 +58,10 @@ export function getSession(): Session | null {
   const token = localStorage.getItem(TOKEN_KEY);
   if (!token) return null;
   const rawUser = localStorage.getItem(USER_KEY);
+  const rawPermissions = localStorage.getItem(PERMISSIONS_KEY);
   const user = rawUser ? (JSON.parse(rawUser) as SessionUser) : userFromToken(token);
-  return { token, user: { ...user, role: normalizeRole(user.role) } };
+  const permissions = rawPermissions ? (JSON.parse(rawPermissions) as Permission[]) : undefined;
+  return { token, user: normalizeUser(user), permissions };
 }
 
 export function getAuthToken() {
@@ -53,5 +72,6 @@ export function getAuthToken() {
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(PERMISSIONS_KEY);
   document.cookie = `${TOKEN_KEY}=; path=/; max-age=0; samesite=lax`;
 }

@@ -10,26 +10,30 @@ const { RedisStore } = require("rate-limit-redis");
 const pkg = require("../package.json");
 
 const logger = require("./config/logger");
-const pool = require("./config/db");
 const { getRedis } = require("./config/redis");
-const localAI = require("./infrastructure/ai/localAI.service");
+const { runReadinessCheck } = require("./health/readiness");
+const { getClientIpForRateLimit } = require("./utils/clientIp");
+const { devRoutesGuard } = require("./middlewares/devRoutesGuard");
+const auth = require("./middlewares/auth");
+const { parseCorsOrigins } = require("./config/env");
 
 const app = express();
 
 if (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1") {
-  app.set("trust proxy", 1);
+  const hops = parseInt(process.env.TRUST_PROXY_HOPS || "1", 10);
+  app.set("trust proxy", Number.isFinite(hops) && hops > 0 ? hops : 1);
 }
 
-/* =========================
-   MIDDLEWARES
-========================= */
+if (process.env.NODE_ENV === "production" && process.env.TRUST_PROXY !== "true" && process.env.TRUST_PROXY !== "1") {
+  logger.warn(
+    "[op] TRUST_PROXY não está a true: req.ip e rate limit podem colapsar no IP do proxy. " +
+      "Defina TRUST_PROXY=true atrás de reverse proxy. Ver docs/OPERATIONS.md"
+  );
+}
+
 app.use(helmet());
 
-const corsOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-  : null;
+const corsOrigins = parseCorsOrigins();
 
 const devLocalOrigin = [
   /^https?:\/\/localhost(?::\d+)?$/i,
@@ -47,6 +51,7 @@ function corsMiddleware(req, res, next) {
   if (req.path.startsWith("/api/public")) {
     return cors({ origin: true, credentials: false })(req, res, next);
   }
+
   return cors(privateCorsOptions)(req, res, next);
 }
 
@@ -88,8 +93,10 @@ function createLimiter(options, keyPrefix) {
       sendCommand: (command, ...args) => redis.call(command, ...args),
       prefix: `rl:${keyPrefix}:`
     });
+
   return rateLimit({
     ...options,
+    keyGenerator: (req) => getClientIpForRateLimit(req),
     ...(store ? { store } : {})
   });
 }
@@ -126,7 +133,7 @@ const writeLimiter = createLimiter(
     max: writeMax,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Limite de alterações excedido. Tente mais tarde." }
+    message: { error: "Limite de alteracoes excedido. Tente mais tarde." }
   },
   "write"
 );
@@ -137,6 +144,7 @@ app.use((req, res, next) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     return readLimiter(req, res, next);
   }
+
   return writeLimiter(req, res, next);
 });
 
@@ -148,39 +156,27 @@ app.get("/health", (req, res) => {
 });
 
 app.get("/ready", async (req, res) => {
-  try {
-    await pool.query("SELECT 1");
-    res.json({ status: "ready" });
-  } catch (err) {
-    logger.error({ err }, "readiness falhou");
-    res.status(503).json({ status: "not_ready" });
+  const { statusCode, body } = await runReadinessCheck();
+  if (statusCode >= 500) {
+    logger.error({ body }, "readiness falhou");
+  } else if (statusCode === 503) {
+    logger.warn({ body }, "readiness: não pronto");
   }
+  res.status(statusCode).json(body);
 });
 
 const authRoutes = require("./modules/auth/auth.routes");
 app.use("/api/auth", authLimiter, authRoutes);
 
-/* =========================
-   INICIALIZAÇÃO SEGURA DA IA LOCAL
-========================= */
-async function initializeLocalAI() {
-  try {
-    await localAI.init();
-    console.log("🧠 IA Local inicializada com sucesso");
-  } catch (error) {
-    console.error("⚠️ IA Local desabilitada:", error.message);
-    // NÃO derruba o sistema
-  }
-}
+const webhookRoutes = require("./modules/lead_sources/webhook.routes");
+app.use("/api/webhooks", webhookRoutes);
 
-initializeLocalAI();
-
-/* =========================
-   ROTAS (mapa único: altere só este array)
-========================= */
 const mountRoutes = [
   ["/api/vehicles", require("./modules/vehicles/vehicles.routes")],
   ["/api/leads", require("./modules/leads/leads.routes")],
+  ["/api/lead-sources", require("./modules/lead_sources/leadSources.routes")],
+  ["/api/after-sales", require("./modules/after_sales/afterSales.routes")],
+  ["/api/stock-intelligence", require("./modules/stock_intelligence/stockIntelligence.routes")],
   ["/api/dashboard", require("./modules/dashboard/dashboard.routes")],
   ["/api/ai-seller", require("./modules/ai_seller/aiSeller.routes")],
   ["/api/ai-settings", require("./modules/ai_settings/aiSettings.routes")],
@@ -189,6 +185,8 @@ const mountRoutes = [
   ["/api/whatsapp", require("./modules/whatsapp/whatsapp.routes")],
   ["/api/inbox", require("./modules/inbox/inbox.routes")],
   ["/api/lead-distribution", require("./modules/lead_distribution/distribution.routes")],
+  ["/api/lead-priority", require("./modules/lead_priority/priority.routes")],
+  ["/api/intelligence", require("./modules/intelligence/intelligence.routes")],
   ["/api/forecast", require("./modules/analytics/forecast.routes")],
   ["/api/dashboard-intelligence", require("./modules/dashboard_intelligence/dashboard.routes")],
   ["/api/notifications", require("./modules/notifications/rules/notification.routes")],
@@ -212,39 +210,47 @@ const mountRoutes = [
   ["/api/public", require("./modules/public/public.routes")]
 ];
 
-if (process.env.NODE_ENV !== "production") {
-  mountRoutes.push(["/api/dev", require("./modules/dev/dev.routes")]);
-}
-
 mountRoutes.forEach(([path, router]) => {
-  app.use(path, router);
+  if (path === "/api/public") {
+    app.use(path, router);
+  } else {
+    app.use(path, auth.withSubscription, router);
+  }
 });
 
-/* =========================
-   ENDPOINT DE SAÚDE + MAPA DA API
-========================= */
+const isProd = process.env.NODE_ENV === "production";
+const wantDev = process.env.ENABLE_DEV_ROUTES === "true" && !isProd;
+const devSecretLen = (process.env.DEV_ROUTES_SECRET || "").length;
+const canMountDev = wantDev && devSecretLen >= 16;
+if (wantDev && !canMountDev) {
+  logger.warn(
+    "[op] ENABLE_DEV_ROUTES sem DEV_ROUTES_SECRET (mín. 16 caracteres); /api/dev não foi montada"
+  );
+}
+if (canMountDev) {
+  const devRouter = require("./modules/dev/dev.routes");
+  app.use("/api/dev", devRoutesGuard, devRouter);
+}
+
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
     service: "autodriv-core",
     version: pkg.version,
-    localAI: localAI ? "initialized_or_attempted" : "not_loaded",
     apiMap: "/api"
   });
 });
 
 app.get("/api", (req, res) => {
+  const devExtra = canMountDev ? ["/api/dev"] : [];
   res.json({
     service: pkg.name,
     version: pkg.version,
     description: pkg.description,
-    mounts: ["/api/auth", ...mountRoutes.map(([prefix]) => prefix)]
+    mounts: ["/api/auth", ...mountRoutes.map(([prefix]) => prefix), ...devExtra]
   });
 });
 
-/* =========================
-   HANDLER DE ERROS
-========================= */
 app.use((err, req, res, next) => {
   logger.error({ err }, "Erro global");
   res.status(500).json({

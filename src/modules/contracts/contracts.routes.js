@@ -5,6 +5,8 @@ const router = express.Router();
 const controller = require("./contracts.controller");
 const auth = require("../../middlewares/auth");
 
+router.get("/", auth, controller.list);
+router.get("/:id", auth, controller.get);
 router.post("/:id/send-approval", auth, controller.sendForApproval);
 router.post("/:id/approve", auth, controller.approve);
 router.post("/:id/reject", auth, controller.reject);

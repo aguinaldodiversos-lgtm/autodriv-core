@@ -2,6 +2,33 @@
 
 const service = require("./contracts.service");
 
+async function list(req, res) {
+  try {
+    const contracts = await service.listContracts(req.user, {
+      status: req.query.status,
+      limit: req.query.limit
+    });
+    return res.json(contracts);
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      message: err.message
+    });
+  }
+}
+
+async function get(req, res) {
+  try {
+    const contract = await service.getContract(req.params.id, req.user);
+    return res.json(contract);
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      message: err.message
+    });
+  }
+}
+
 async function sendForApproval(req, res) {
   try {
     const { id } = req.params;
@@ -53,6 +80,8 @@ async function generate(req, res) {
 }
 
 module.exports = {
+  list,
+  get,
   sendForApproval,
   approve,
   reject,

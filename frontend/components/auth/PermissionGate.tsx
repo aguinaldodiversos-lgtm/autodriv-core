@@ -14,7 +14,13 @@ export function PermissionGate({
   fallback?: ReactNode;
 }) {
   const session = getSession();
-  if (!session || !hasPermission(session.user.role, permission)) {
+  const allowed = session?.permissions
+    ? session.permissions.includes(permission)
+    : session
+      ? hasPermission(session.user.role, permission)
+      : false;
+
+  if (!allowed) {
     return <>{fallback}</>;
   }
 

@@ -1,55 +1,74 @@
 const pool = require("../../config/db");
 const { parse } = require("csv-parse/sync");
 
-/* =========================
-   IMPORTAÇÃO DE LEADS VIA CSV
-========================= */
-async function importLeads(csvBuffer, user) {
-  const dealershipId = user.dealership_id;
-
+function parseLeadRows(csvBuffer) {
   const csvText = csvBuffer.toString("utf8");
 
-  const records = parse(csvText, {
+  return parse(csvText, {
     columns: true,
     skip_empty_lines: true
-  });
+  })
+    .map((row) => ({
+      client_name: row.name || row.nome || null,
+      client_phone: row.phone || row.telefone || null
+    }))
+    .filter((row) => row.client_phone);
+}
 
-  const inserted = [];
+async function importLeads(csvBuffer, user) {
+  const dealershipId = user.dealership_id;
+  const rows = parseLeadRows(csvBuffer);
 
-  for (const row of records) {
-    const client_name = row.name || row.nome || null;
-    const client_phone = row.phone || row.telefone || null;
-
-    if (!client_phone) continue;
-
-    const leadResult = await pool.query(
-      `INSERT INTO leads
-       (dealership_id, client_name, client_phone, origin, status, created_at)
-       VALUES ($1,$2,$3,'import','new',NOW())
-       RETURNING *`,
-      [dealershipId, client_name, client_phone]
-    );
-
-    const lead = leadResult.rows[0];
-
-    // cria estado da IA
-    await pool.query(
-      `INSERT INTO lead_ai_state
-       (dealership_id, lead_id, stage, created_at, updated_at)
-       VALUES ($1,$2,'new',NOW(),NOW())
-       ON CONFLICT (lead_id) DO NOTHING`,
-      [dealershipId, lead.id]
-    );
-
-    inserted.push(lead);
+  if (!rows.length) {
+    return { total: 0, leads: [] };
   }
 
-  return {
-    total: inserted.length,
-    leads: inserted
-  };
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const values = [];
+    const placeholders = rows.map((row, index) => {
+      const offset = index * 3;
+      values.push(dealershipId, row.client_name, row.client_phone);
+      return `($${offset + 1}, $${offset + 2}, $${offset + 3}, 'import', 'new', NOW())`;
+    });
+
+    const leadResult = await client.query(
+      `INSERT INTO leads
+       (dealership_id, client_name, client_phone, origin, status, created_at)
+       VALUES ${placeholders.join(", ")}
+       RETURNING *`,
+      values
+    );
+
+    const leadIds = leadResult.rows.map((lead) => lead.id);
+
+    await client.query(
+      `INSERT INTO lead_ai_state
+       (dealership_id, lead_id, stage, created_at, updated_at)
+       SELECT $1, lead_id, 'new', NOW(), NOW()
+       FROM unnest($2::int[]) AS lead_id
+       ON CONFLICT (lead_id) DO NOTHING`,
+      [dealershipId, leadIds]
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      total: leadResult.rows.length,
+      leads: leadResult.rows
+    };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 module.exports = {
-  importLeads
+  importLeads,
+  parseLeadRows
 };

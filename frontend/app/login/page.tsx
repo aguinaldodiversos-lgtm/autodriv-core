@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CarFront } from "lucide-react";
-import { login } from "@/lib/api/auth";
+import { getCurrentSession, login } from "@/lib/api/auth";
 import { saveSession } from "@/lib/auth/session";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -24,7 +24,8 @@ function LoginForm() {
 
     try {
       const result = await login({ email, password });
-      saveSession(result.token);
+      const profile = await getCurrentSession(result.token);
+      saveSession(result.token, profile);
       router.replace(searchParams.get("next") || "/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Nao foi possivel entrar.");

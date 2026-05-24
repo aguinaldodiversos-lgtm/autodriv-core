@@ -1,31 +1,50 @@
-const repo = require("./images.repository");
+const fs = require("fs");
+const service = require("./images.service");
 
-async function upload(req, res) {
+function cleanupUploadedFile(file) {
+  if (!file || !file.path) return;
+  const p = String(file.path);
+  if (p.startsWith("http://") || p.startsWith("https://")) return;
   try {
-    const vehicleId = req.params.vehicleId;
-
-    if (!req.file) {
-      return res.status(400).json({ error: "Imagem não enviada" });
-    }
-
-    const image = await repo.create(
-      vehicleId,
-      req.file.path,
-      false
-    );
-
-    res.json(image);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch (_) {
+    // ignore: não mascarar o erro original do fluxo
   }
 }
 
+async function upload(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "Imagem não enviada" });
+    }
+    const image = await service.uploadVehicleImage(
+      req.params.vehicleId,
+      req.file,
+      req.user
+    );
+    return res.json(image);
+  } catch (err) {
+    cleanupUploadedFile(req.file);
+    if (err && err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    return res.status(400).json({ error: err.message || "Erro" });
+  }
+}
+
+/**
+ * Rota de listagem: **privada**, mesmo escopo do POST — só a própria loja vê imagens
+ * do veículo (não expõe mídia a outro tenant; não substitui o catálogo em /api/public).
+ */
 async function list(req, res) {
   try {
-    const images = await repo.list(req.params.vehicleId);
-    res.json(images);
+    const images = await service.listVehicleImages(req.params.vehicleId, req.user);
+    return res.json(images);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    if (err && err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    return res.status(400).json({ error: err.message || "Erro" });
   }
 }
 

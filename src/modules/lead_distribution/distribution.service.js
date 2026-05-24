@@ -1,19 +1,45 @@
 const pool = require("../../config/db");
 
+function httpError(message, statusCode) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
+
 /* =====================================================
    DISTRIBUIÇÃO INTELIGENTE
+   Obrigatório: userDealershipId = req.user.dealership_id (nunca confiar só no id do lead).
 ===================================================== */
-async function distributeLead(leadId) {
+async function distributeLead(leadId, userDealershipId) {
+  if (userDealershipId == null) {
+    throw httpError("Loja não associada ao utilizador", 403);
+  }
+
+  const id = parseInt(leadId, 10);
+  if (!Number.isFinite(id) || id <= 0) {
+    throw httpError("leadId inválido", 400);
+  }
+
+  const userDealer = Number(userDealershipId);
+  if (!Number.isFinite(userDealer)) {
+    throw httpError("Loja inválida", 400);
+  }
+
   const leadResult = await pool.query(
-    `SELECT dealership_id FROM leads WHERE id = $1`,
-    [leadId]
+    `SELECT id, dealership_id FROM leads WHERE id = $1`,
+    [id]
   );
 
-  if (!leadResult.rows.length) return;
+  if (!leadResult.rows.length) {
+    throw httpError("Lead não encontrado", 404);
+  }
 
-  const dealershipId = leadResult.rows[0].dealership_id;
+  const leadDealer = Number(leadResult.rows[0].dealership_id);
+  if (leadDealer !== userDealer) {
+    throw httpError("Acesso negado: lead de outra loja", 403);
+  }
 
-  // Busca vendedores ativos
+  // Busca vendedores ativos (sempre na mesma loja do token)
   const usersResult = await pool.query(
     `SELECT u.id,
             COUNT(l.id) as total_leads
@@ -24,20 +50,25 @@ async function distributeLead(leadId) {
      AND u.role = 'seller'
      GROUP BY u.id
      ORDER BY total_leads ASC`,
-    [dealershipId]
+    [userDealer]
   );
 
   if (!usersResult.rows.length) return;
 
-  // Escolhe vendedor com menos leads
   const selectedUser = usersResult.rows[0];
 
-  await pool.query(
+  const update = await pool.query(
     `UPDATE leads
      SET assigned_user_id = $2
-     WHERE id = $1`,
-    [leadId, selectedUser.id]
+     WHERE id = $1
+       AND dealership_id = $3
+     RETURNING id`,
+    [id, selectedUser.id, userDealer]
   );
+
+  if (!update.rows.length) {
+    throw httpError("Lead não encontrado", 404);
+  }
 
   return selectedUser.id;
 }
@@ -46,6 +77,10 @@ async function distributeLead(leadId) {
    LISTA COMPLETA PARA ADMIN
 ===================================================== */
 async function getAdminLeadList(dealershipId) {
+  if (dealershipId == null) {
+    throw httpError("Loja não associada ao utilizador", 403);
+  }
+
   const result = await pool.query(
     `SELECT
         l.id,

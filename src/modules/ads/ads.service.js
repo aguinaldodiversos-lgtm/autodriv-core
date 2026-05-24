@@ -5,7 +5,7 @@ async function generateAd(data, user) {
   const vehicleResult = await pool.query(
     `SELECT * FROM vehicles
      WHERE id = $1 AND dealership_id = $2`,
-    [data.vehicle_id, user.dealershipId]
+    [data.vehicle_id, user.dealership_id]
   );
 
   const vehicle = vehicleResult.rows[0];
@@ -21,7 +21,7 @@ Entre em contato para mais informações.
 `.trim();
 
   const ad = await repo.create({
-    dealership_id: user.dealershipId,
+    dealership_id: user.dealership_id,
     vehicle_id: vehicle.id,
     title,
     description,
@@ -32,7 +32,7 @@ Entre em contato para mais informações.
 }
 
 async function listAds(vehicleId, user) {
-  return repo.findByVehicle(vehicleId, user.dealershipId);
+  return repo.findByVehicle(vehicleId, user.dealership_id);
 }
 
 module.exports = {

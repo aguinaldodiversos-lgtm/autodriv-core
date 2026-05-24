@@ -1,7 +1,7 @@
 const pool = require("../../config/db");
 
 async function getAlerts(user) {
-  const dealershipId = user.dealershipId;
+  const dealershipId = user.dealership_id;
   const alerts = [];
 
   /* =========================

@@ -1,93 +1,74 @@
 const pool = require("../../config/db");
 
-/* =====================================================
-   RANKING DE VENDEDORES
-===================================================== */
-
 async function calculateRanking(dealershipId, month, year) {
-
-  const sellers = await pool.query(
-    `SELECT id, name
-     FROM users
-     WHERE dealership_id = $1
-     AND role = 'seller'`,
-    [dealershipId]
-  );
-
-  const ranking = [];
-
-  for (const seller of sellers.rows) {
-
-    // Vendas do mês
-    const salesResult = await pool.query(
-      `SELECT COUNT(*) as total_sales,
-              COALESCE(SUM(sale_price),0) as total_revenue
+  const { rows } = await pool.query(
+    `WITH sales_month AS (
+       SELECT user_id,
+              COUNT(*)::int AS total_sales,
+              COALESCE(SUM(price), 0)::numeric AS total_revenue
        FROM sales
        WHERE dealership_id = $1
-       AND user_id = $2
-       AND EXTRACT(MONTH FROM created_at) = $3
-       AND EXTRACT(YEAR FROM created_at) = $4`,
-      [dealershipId, seller.id, month, year]
-    );
-
-    const totalSales = parseInt(salesResult.rows[0].total_sales);
-    const totalRevenue = parseFloat(salesResult.rows[0].total_revenue);
-
-    // Leads atendidos
-    const leadsResult = await pool.query(
-      `SELECT COUNT(*) 
+         AND EXTRACT(MONTH FROM created_at) = $2
+         AND EXTRACT(YEAR FROM created_at) = $3
+       GROUP BY user_id
+     ),
+     leads_by_seller AS (
+       SELECT assigned_user_id AS user_id,
+              COUNT(*)::int AS total_leads
        FROM leads
        WHERE dealership_id = $1
-       AND assigned_user_id = $2`,
-      [dealershipId, seller.id]
-    );
-
-    const totalLeads = parseInt(leadsResult.rows[0].count);
-
-    // Visitas agendadas
-    const visitsResult = await pool.query(
-      `SELECT COUNT(*)
-       FROM lead_ai_state s
-       JOIN leads l ON l.id = s.lead_id
+         AND assigned_user_id IS NOT NULL
+       GROUP BY assigned_user_id
+     ),
+     visits_by_seller AS (
+       SELECT l.assigned_user_id AS user_id,
+              COUNT(*)::int AS visits
+       FROM leads l
+       JOIN lead_ai_state s ON s.lead_id = l.id
        WHERE l.dealership_id = $1
-       AND l.assigned_user_id = $2
-       AND s.stage = 'visit_scheduled'`,
-      [dealershipId, seller.id]
-    );
-
-    const visits = parseInt(visitsResult.rows[0].count);
-
-    // Meta
-    const goalResult = await pool.query(
-      `SELECT sales_target
+         AND l.assigned_user_id IS NOT NULL
+         AND s.stage = 'visit_scheduled'
+       GROUP BY l.assigned_user_id
+     ),
+     goals AS (
+       SELECT user_id,
+              sales_target
        FROM monthly_goals
        WHERE dealership_id = $1
-       AND user_id = $2
-       AND month = $3
-       AND year = $4`,
-      [dealershipId, seller.id, month, year]
-    );
+         AND month = $2
+         AND year = $3
+     )
+     SELECT u.id,
+            u.name,
+            COALESCE(sm.total_sales, 0)::int AS total_sales,
+            COALESCE(sm.total_revenue, 0)::numeric AS total_revenue,
+            COALESCE(lb.total_leads, 0)::int AS total_leads,
+            COALESCE(vb.visits, 0)::int AS visits,
+            COALESCE(g.sales_target, 0)::numeric AS sales_target
+     FROM users u
+     LEFT JOIN sales_month sm ON sm.user_id = u.id
+     LEFT JOIN leads_by_seller lb ON lb.user_id = u.id
+     LEFT JOIN visits_by_seller vb ON vb.user_id = u.id
+     LEFT JOIN goals g ON g.user_id = u.id
+     WHERE u.dealership_id = $1
+       AND u.role = 'seller'`,
+    [dealershipId, month, year]
+  );
 
-    const target = goalResult.rows.length
-      ? goalResult.rows[0].sales_target
-      : 0;
+  const ranking = rows.map((seller) => {
+    const totalSales = Number(seller.total_sales || 0);
+    const totalRevenue = Number(seller.total_revenue || 0);
+    const totalLeads = Number(seller.total_leads || 0);
+    const visits = Number(seller.visits || 0);
+    const target = Number(seller.sales_target || 0);
+    const metaPercent = target ? (totalSales / target) * 100 : 0;
+    const score =
+      totalSales * 20 +
+      visits * 10 +
+      metaPercent +
+      totalLeads * 2;
 
-    const metaPercent = target
-      ? (totalSales / target) * 100
-      : 0;
-
-    /* =====================================================
-       PONTUAÇÃO FINAL
-    ===================================================== */
-
-    let score = 0;
-
-    score += totalSales * 20;
-    score += visits * 10;
-    score += metaPercent;
-    score += totalLeads * 2;
-
-    ranking.push({
+    return {
       seller_id: seller.id,
       seller_name: seller.name,
       total_sales: totalSales,
@@ -96,8 +77,8 @@ async function calculateRanking(dealershipId, month, year) {
       visits,
       meta_percent: Number(metaPercent.toFixed(1)),
       ranking_score: Number(score.toFixed(1))
-    });
-  }
+    };
+  });
 
   ranking.sort((a, b) => b.ranking_score - a.ranking_score);
 

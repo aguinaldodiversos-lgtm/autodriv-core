@@ -1,5 +1,15 @@
 # AutoDriv Frontend/Backend Map
 
+## Atualizacao Sprint 1
+
+- `GET /api/auth/me` foi implementado em `src/modules/auth/auth.controller.js` para retornar `user`, `dealership`, `subscription` e `permissions`.
+- `GET /api/contracts` foi implementado em `src/modules/contracts/contracts.controller.js` para listar contratos da loja autenticada com cliente, veiculo, valor e responsavel.
+- `GET /api/contracts/:id` foi implementado para detalhe basico de contrato com escopo por `dealership_id`.
+- `PATCH /api/intelligence/actions/:id/feedback` ja existia no backend e agora esta ligado no frontend para aceitar/ignorar recomendacoes.
+- `POST /api/intelligence/actions/:id/outcome` foi criado para registrar se uma acao aceita gerou venda, resposta, proposta, agendamento, recompra ou nenhum resultado.
+- `GET /api/intelligence/learning-metrics` foi criado para medir aceitacao, resultado, conversao por vendedor, conversao por tipo de acao e ROI proxy.
+- Pendencias restantes: criar/editar contrato por API dedicada, gestao de usuarios/equipe e permissao dinamica caso a regra deixe de ser fixa por papel.
+
 Auditoria feita para criação do frontend isolado em `frontend/`. O backend atual continua na raiz, com entrada em `src/server.js` e aplicação Express em `src/app.js`.
 
 ## Visão Geral
@@ -42,7 +52,7 @@ Auditoria feita para criação do frontend isolado em `frontend/`. O backend atu
 - O backend recarrega `id`, `email`, `dealership_id` e `role` do banco a cada request autenticada.
 - Papéis reais encontrados no backend: `admin`, `manager`, `seller`, `maintenance` em migrations antigas; contratos validam `seller`, `manager`, `admin`.
 - Papéis desejados para frontend SaaS: `super_admin`, `admin`, `gestor`, `vendedor`, `financeiro`, `operador`, `cliente`, `auditor`, `ia_agent`. Eles são base de UI; o backend ainda precisa consolidar a regra final.
-- TODO técnico: criar endpoint seguro `GET /api/auth/me` para o frontend obter perfil e permissões sem decodificar token no cliente.
+- `GET /api/auth/me` implementado para o frontend obter perfil, loja, assinatura e permissões sem depender apenas do JWT no cliente.
 
 ## Rotas Mapeadas
 
@@ -58,6 +68,7 @@ Status:
 | GET | `/ready` | `src/app.js`, `src/health/readiness.js` | Não | Não | - | Readiness de Postgres/Redis | pronto para uso |
 | POST | `/api/auth/login` | `src/modules/auth/auth.controller.js` | Não | Não | `{ email, password }` | `{ token }` | pronto para uso |
 | POST | `/api/auth/register` | `src/modules/auth/auth.controller.js` | Não | Não | `{ dealership_name, name, email, password }` | `{ token, dealership, trial_ends_at }` | pronto para uso |
+| GET | `/api/auth/me` | `src/modules/auth/auth.controller.js` | Bearer | Usuário autenticado | - | `{ user, dealership, subscription, permissions }` | pronto para uso |
 | GET | `/api/dashboard` | `src/modules/dashboard/dashboard.controller.js` | Bearer + assinatura | Usuário autenticado | - | Métricas gerais | pronto para uso |
 | GET | `/api/dashboard/operations` | `src/modules/dashboard/dashboard.controller.js` | Bearer + assinatura | Usuário autenticado | - | Cockpit com `summary_cards`, `intelligence`, `inbox`, `pipeline` | pronto para uso |
 | GET | `/api/dashboard/intelligence-actions` | `src/modules/dashboard/dashboard.controller.js` | Bearer + assinatura | Usuário autenticado | - | Modelo pronto para tela de ações inteligentes | pronto para uso |
@@ -79,7 +90,8 @@ Status:
 | PUT | `/api/vehicles/:id` | `src/modules/vehicles/vehicles.controller.js` | Bearer + assinatura | Usuário autenticado | Campos de veículo; `brand`, `model`, `year` são obrigatórios após merge | Veículo atualizado | pronto para uso |
 | DELETE | `/api/vehicles/:id` | `src/modules/vehicles/vehicles.controller.js` | Bearer + assinatura | Usuário autenticado | - | `{ success: true }` | pronto para uso |
 | POST | `/api/vehicles/:id/apply-suggestion` | `src/modules/vehicles/vehicles.controller.js` | Bearer + assinatura | Usuário autenticado | - | Resultado de sugestão/publicação | incerto |
-| GET | `/api/contracts/*` | `src/modules/contracts/contracts.routes.js` | Bearer + assinatura | - | - | - | ausente |
+| GET | `/api/contracts` | `src/modules/contracts/contracts.controller.js` | Bearer + assinatura | Usuário autenticado | Query `status`, `limit` | Array de contratos com cliente, veículo, valor e responsável | pronto para uso |
+| GET | `/api/contracts/:id` | `src/modules/contracts/contracts.controller.js` | Bearer + assinatura | Usuário autenticado | - | Contrato com cliente, veículo, valor e responsável | pronto para uso |
 | POST | `/api/contracts/:id/send-approval` | `src/modules/contracts/contracts.controller.js` | Bearer + assinatura | Serviço valida fluxo | - | `{ success, result }` | pronto para uso |
 | POST | `/api/contracts/:id/approve` | `src/modules/contracts/contracts.controller.js` | Bearer + assinatura | `manager` ou `admin` no service | - | `{ success, result }` | pronto para uso |
 | POST | `/api/contracts/:id/reject` | `src/modules/contracts/contracts.controller.js` | Bearer + assinatura | `manager` ou `admin` no service | `{ reason }` | `{ success, result }` | pronto para uso |
@@ -100,7 +112,9 @@ Status:
 | GET | `/api/pipeline/:id/activities` | `src/modules/pipeline/pipeline.controller.js` | Bearer + assinatura | Usuário autenticado | - | Atividades | pronto para uso |
 | POST | `/api/pipeline/:id/activities` | `src/modules/pipeline/pipeline.controller.js` | Bearer + assinatura | Usuário autenticado | `{ type?, title?, description?, next_action_at?, metadata? }` | Atividade criada | pronto para uso |
 | GET | `/api/intelligence/today` | `src/modules/intelligence/intelligence.controller.js` | Bearer + assinatura | Usuário autenticado | - | Recomendações do dia | pronto para uso |
+| GET | `/api/intelligence/learning-metrics` | `src/modules/intelligence/intelligence.controller.js` | Bearer + assinatura | Usuário autenticado | Query `days` | Métricas de aprendizado e ROI proxy | pronto para uso |
 | PATCH | `/api/intelligence/actions/:id/feedback` | `src/modules/intelligence/intelligence.controller.js` | Bearer + assinatura | Usuário autenticado | `{ status: "accepted"|"ignored" }` | Ação atualizada | pronto para uso |
+| POST | `/api/intelligence/actions/:id/outcome` | `src/modules/intelligence/intelligence.controller.js` | Bearer + assinatura | Ação aceita da mesma loja | `{ outcome_type, outcome_value?, notes?, occurred_at?, metadata? }` | Resultado da ação salvo | pronto para uso |
 | POST | `/api/ai-seller/message` | `src/modules/ai_seller/aiSeller.controller.js` | Bearer + assinatura | Usuário autenticado | `{ lead_id, message }` | Resposta/estado da IA | pronto para uso |
 | GET | `/api/ai-settings` | `src/modules/ai_settings/aiSettings.controller.js` | Bearer + assinatura | Usuário autenticado | - | Configuração de IA | pronto para uso |
 | PUT | `/api/ai-settings` | `src/modules/ai_settings/aiSettings.controller.js` | Bearer + assinatura | Usuário autenticado | Configuração de IA | Configuração atualizada | incerto |
@@ -133,21 +147,17 @@ Status:
 
 | Necessidade | Endpoint sugerido | Motivo |
 |---|---|---|
-| Sessão atual | `GET /api/auth/me` | Evitar decodificar token no browser; retornar usuário, loja, role e assinatura |
-| Listagem de contratos | `GET /api/contracts` | Página `/contratos` precisa listar contratos |
-| Detalhe de contrato | `GET /api/contracts/:id` | Página futura de detalhe/aprovação |
 | Criar/editar contrato | `POST /api/contracts`, `PUT /api/contracts/:id` | Hoje há apenas ações de aprovação/geração |
 | Usuários/equipe | `GET /api/users` | Configurações, permissões, atribuição de leads |
-| Permissões backend | `GET /api/auth/permissions` ou embutido em `/api/auth/me` | UI precisa refletir papéis reais validados pelo backend |
+| Permissões backend dinâmicas | `GET /api/auth/permissions` opcional | `/api/auth/me` já retorna permissões iniciais; endpoint separado só será necessário se a regra virar dinâmica |
 
 ## Riscos Encontrados
 
 - A raiz do repo é backend. O frontend deve ficar 100% em `frontend/` e usar serviço separado no Render.
 - `CORS_ORIGIN` precisa incluir a URL real do frontend; caso contrário o browser será bloqueado.
 - `GET /api/dashboard/alerts` consulta `financial_transactions`, mas o módulo financeiro atual usa `finance_entries`; rota marcada como incerta.
-- Contratos têm ações, mas não têm listagem no router atual; página `/contratos` precisa usar estado vazio/TODO até o backend expor listagem.
+- Contratos agora têm listagem e detalhe básicos; ainda falta criar/editar contrato por API dedicada.
 - Algumas permissões estão em services, não centralizadas. Exemplo: contratos validam `seller`, `manager`, `admin`.
-- A autenticação retorna apenas `{ token }`; o frontend precisa estimar sessão por JWT até existir `/api/auth/me`.
+- Login retorna `{ token }`; o frontend consulta `/api/auth/me` em seguida para salvar perfil e permissões reais da sessão.
 - Alguns papéis desejados pelo SaaS ainda não existem no backend. O frontend inclui base expansível, mas backend precisa validar a regra final.
 - IA nunca deve ser chamada diretamente pelo frontend. O fluxo correto é frontend -> backend -> serviço/fila/worker -> resultado salvo -> frontend consulta.
-

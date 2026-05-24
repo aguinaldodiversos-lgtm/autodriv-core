@@ -3,18 +3,22 @@
 import { useEffect, useState } from "react";
 import { Activity, Clock, Inbox, UsersRound } from "lucide-react";
 import { getOperationsDashboard } from "@/lib/api/dashboard";
+import { sendAiActionFeedback } from "@/lib/api/ia";
 import { AppShell } from "@/components/layout/AppShell";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { PipelineSummary } from "@/components/dashboard/PipelineSummary";
+import { ActionOutcomeModal } from "@/components/intelligence/ActionOutcomeModal";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import type { OperationsDashboard } from "@/types/dashboard";
+import type { IntelligenceAction, OperationsDashboard } from "@/types/dashboard";
 
 export default function DashboardPage() {
   const [data, setData] = useState<OperationsDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [decidingId, setDecidingId] = useState<number | null>(null);
+  const [outcomeAction, setOutcomeAction] = useState<IntelligenceAction | null>(null);
 
   useEffect(() => {
     getOperationsDashboard()
@@ -22,6 +26,32 @@ export default function DashboardPage() {
       .catch((err) => setError(err instanceof Error ? err.message : "Erro ao carregar dashboard."))
       .finally(() => setLoading(false));
   }, []);
+
+  async function decideAction(action: IntelligenceAction, status: "accepted" | "ignored") {
+    setError(null);
+    setDecidingId(action.id);
+
+    try {
+      await sendAiActionFeedback(action.id, status);
+      setData((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          intelligence: {
+            ...current.intelligence,
+            actions: current.intelligence.actions.filter((item) => item.id !== action.id)
+          }
+        };
+      });
+      if (status === "accepted") {
+        setOutcomeAction(action);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nao foi possivel registrar o feedback.");
+    } finally {
+      setDecidingId(null);
+    }
+  }
 
   return (
     <AppShell>
@@ -67,7 +97,11 @@ export default function DashboardPage() {
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-            <RecentActivity actions={data.intelligence.actions || []} />
+            <RecentActivity
+              actions={data.intelligence.actions || []}
+              decidingId={decidingId}
+              onDecision={decideAction}
+            />
             <PipelineSummary stages={data.pipeline.stages || []} />
           </section>
 
@@ -93,6 +127,12 @@ export default function DashboardPage() {
           </Card>
         </div>
       ) : null}
+      <ActionOutcomeModal
+        action={outcomeAction}
+        source="dashboard"
+        onClose={() => setOutcomeAction(null)}
+        onSaved={() => setOutcomeAction(null)}
+      />
     </AppShell>
   );
 }

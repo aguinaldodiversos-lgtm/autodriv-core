@@ -33,7 +33,14 @@ if (process.env.NODE_ENV === "production" && process.env.TRUST_PROXY !== "true" 
 
 app.use(helmet());
 
+const rawCorsOrigin = process.env.CORS_ORIGIN ? String(process.env.CORS_ORIGIN).trim() : "";
 const corsOrigins = parseCorsOrigins();
+const defaultProductionCorsOrigins =
+  process.env.NODE_ENV === "production" && !rawCorsOrigin
+    ? ["https://autodriv-frontend.onrender.com"]
+    : null;
+const browserCorsOrigins =
+  corsOrigins && corsOrigins.length > 0 ? corsOrigins : defaultProductionCorsOrigins;
 
 const devLocalOrigin = [
   /^https?:\/\/localhost(?::\d+)?$/i,
@@ -41,8 +48,8 @@ const devLocalOrigin = [
 ];
 
 const privateCorsOptions =
-  corsOrigins && corsOrigins.length > 0
-    ? { origin: corsOrigins, credentials: true }
+  browserCorsOrigins && browserCorsOrigins.length > 0
+    ? { origin: browserCorsOrigins, credentials: true }
     : process.env.NODE_ENV === "production"
       ? { origin: false, credentials: true }
       : { origin: devLocalOrigin, credentials: true };

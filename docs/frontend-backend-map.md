@@ -30,7 +30,7 @@ Auditoria feita para criação do frontend isolado em `frontend/`. O backend atu
 | `DATABASE_URL` | PostgreSQL backend | Nunca expor no frontend |
 | `JWT_SECRET` | Assinatura de JWT | Nunca expor no frontend |
 | `REDIS_URL` | Redis opcional para rate limit/filas | Nunca expor no frontend |
-| `CORS_ORIGIN` | Liberação do domínio do frontend | Deve incluir a URL do `autodriv-frontend` |
+| `CORS_ORIGIN` | Liberação do domínio do frontend | Recomenda-se `https://autodriv-frontend.onrender.com`; se omitido em produção, essa origem oficial é liberada por padrão |
 | `OPENAI_API_KEY` | IA no backend | Nunca expor no frontend |
 | `INTELLIGENCE_EXPLAIN_WITH_OPENAI` | Explicações de recomendações | Backend only |
 | `CLOUDINARY_*` | Upload/imagens | Backend only |
@@ -154,7 +154,7 @@ Status:
 ## Riscos Encontrados
 
 - A raiz do repo é backend. O frontend deve ficar 100% em `frontend/` e usar serviço separado no Render.
-- `CORS_ORIGIN` precisa incluir a URL real do frontend; caso contrário o browser será bloqueado.
+- `CORS_ORIGIN` precisa incluir a URL real do frontend em domínios customizados; sem essa liberação o browser bloqueia login/cadastro por CORS.
 - `GET /api/dashboard/alerts` consulta `financial_transactions`, mas o módulo financeiro atual usa `finance_entries`; rota marcada como incerta.
 - Contratos agora têm listagem e detalhe básicos; ainda falta criar/editar contrato por API dedicada.
 - Algumas permissões estão em services, não centralizadas. Exemplo: contratos validam `seller`, `manager`, `admin`.

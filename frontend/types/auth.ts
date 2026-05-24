@@ -11,6 +11,22 @@ export type LoginResponse = {
   token: string;
 };
 
+export type RegisterPayload = {
+  dealership_name: string;
+  name: string;
+  email: string;
+  password: string;
+};
+
+export type RegisterResponse = {
+  token: string;
+  dealership: {
+    id: number;
+    name: string;
+  };
+  trial_ends_at?: string;
+};
+
 export type AuthMeResponse = {
   user: User & {
     dealership_id?: number;

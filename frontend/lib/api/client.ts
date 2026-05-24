@@ -45,12 +45,22 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
   if (options.body !== undefined) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const response = await fetch(buildUrl(path), {
-    method: options.method || "GET",
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    cache: options.cache || "no-store"
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(buildUrl(path), {
+      method: options.method || "GET",
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      cache: options.cache || "no-store"
+    });
+  } catch (err) {
+    throw new ApiError(
+      0,
+      "Nao foi possivel conectar com a API. Verifique se o backend esta ativo e se CORS_ORIGIN libera este frontend.",
+      err
+    );
+  }
 
   const contentType = response.headers.get("content-type") || "";
   const data = contentType.includes("application/json")

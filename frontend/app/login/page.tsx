@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CarFront } from "lucide-react";
-import { getCurrentSession, login } from "@/lib/api/auth";
+import { getCurrentSession, login, register } from "@/lib/api/auth";
 import { saveSession } from "@/lib/auth/session";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -12,6 +12,9 @@ import { Input } from "@/components/ui/Input";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [dealershipName, setDealershipName] = useState("");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -23,12 +26,26 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const result = await login({ email, password });
+      const result =
+        mode === "register"
+          ? await register({
+              dealership_name: dealershipName,
+              name,
+              email,
+              password
+            })
+          : await login({ email, password });
       const profile = await getCurrentSession(result.token);
       saveSession(result.token, profile);
       router.replace(searchParams.get("next") || "/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nao foi possivel entrar.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : mode === "register"
+            ? "Nao foi possivel criar a conta."
+            : "Nao foi possivel entrar."
+      );
     } finally {
       setLoading(false);
     }
@@ -37,10 +54,60 @@ function LoginForm() {
   return (
     <form onSubmit={onSubmit} className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
       <div>
-        <h2 className="text-xl font-semibold text-slate-950">Entrar</h2>
-        <p className="mt-1 text-sm text-slate-500">Use seu acesso do AutoDriv.</p>
+        <h2 className="text-xl font-semibold text-slate-950">
+          {mode === "register" ? "Criar conta" : "Entrar"}
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          {mode === "register"
+            ? "Abra uma loja em teste para examinar o painel."
+            : "Use seu acesso do AutoDriv."}
+        </p>
+        <div className="mt-5 grid grid-cols-2 rounded-md border border-slate-200 bg-slate-50 p-1">
+          <button
+            type="button"
+            className={`h-9 rounded text-sm font-medium transition ${
+              mode === "login" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"
+            }`}
+            onClick={() => {
+              setMode("login");
+              setError(null);
+            }}
+          >
+            Entrar
+          </button>
+          <button
+            type="button"
+            className={`h-9 rounded text-sm font-medium transition ${
+              mode === "register" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"
+            }`}
+            onClick={() => {
+              setMode("register");
+              setError(null);
+            }}
+          >
+            Criar conta
+          </button>
+        </div>
       </div>
       <div className="mt-6 space-y-4">
+        {mode === "register" ? (
+          <>
+            <Input
+              label="Nome da loja"
+              value={dealershipName}
+              onChange={(event) => setDealershipName(event.target.value)}
+              autoComplete="organization"
+              required
+            />
+            <Input
+              label="Seu nome"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              autoComplete="name"
+              required
+            />
+          </>
+        ) : null}
         <Input
           label="Email"
           type="email"
@@ -60,7 +127,7 @@ function LoginForm() {
       </div>
       {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
       <Button className="mt-6 w-full" disabled={loading}>
-        {loading ? "Entrando..." : "Entrar"}
+        {loading ? "Processando..." : mode === "register" ? "Criar conta e entrar" : "Entrar"}
       </Button>
     </form>
   );

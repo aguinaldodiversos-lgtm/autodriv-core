@@ -16,7 +16,7 @@ O load balancer orquestrador deve usar um endpoint separado para liveness (`GET 
 | `TRUST_PROXY_HOPS` | Opcional, numero de proxies. Default: `1`. |
 | `REDIS_URL` | Opcional para a API web. Quando definido, habilita store distribuido do `express-rate-limit` e readiness Redis. Exigido para workers BullMQ. |
 | `REDIS_REQUIRED` | Use `true` somente quando quiser bloquear readiness se Redis estiver ausente. Default: Redis opcional. |
-| `CORS_ORIGIN` | Lista de origens web permitidas, separadas por virgula. Se a API for apenas servidor-a-servidor, omita a variavel ou use `server-to-server`; em producao isso mantem `origin: false`. |
+| `CORS_ORIGIN` | Lista de origens web permitidas, separadas por virgula. Para o frontend oficial, use `https://autodriv-frontend.onrender.com`. Se omitida em producao, o backend libera essa origem padrao. Para API apenas servidor-a-servidor, use `server-to-server`, `private`, `none`, `disabled` ou `false`. |
 | `RATE_LIMIT_*` | Janela e limites; ver configuracao em `src/app.js`. |
 
 Sem `TRUST_PROXY` atras de um reverse proxy, todos os clientes podem partilhar o mesmo `req.ip` e o bucket de rate limit colapsa num unico contador. Em producao a aplicacao regista um aviso de arranque se `TRUST_PROXY` nao estiver ativo.
@@ -37,7 +37,7 @@ Isto evita expor rotas de desenvolvimento em staging por engano.
 ## Ordem de deploy
 
 1. Garantir `DATABASE_URL`, `JWT_SECRET` e, atras de proxy, `TRUST_PROXY=true`.
-2. Definir `CORS_ORIGIN` somente quando houver frontend web consumindo a API. Para API privada/servidor-a-servidor, omitir ou usar `server-to-server`.
+2. Definir `CORS_ORIGIN=https://autodriv-frontend.onrender.com` quando o frontend web consumir a API. Se a variavel for omitida, essa origem padrao sera liberada em producao; para API privada/servidor-a-servidor, usar um sentinela como `server-to-server`.
 3. Rodar `npm run migrate`, se aplicavel.
 4. Arrancar a API.
 5. O orquestrador so deve marcar a replica como pronta quando `GET /ready` devolver 200.

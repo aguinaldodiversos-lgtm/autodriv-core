@@ -69,6 +69,12 @@ export default function DashboardPage() {
 
       {data ? (
         <div className="space-y-6">
+          {data.status === "partial" ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Alguns módulos ainda estão sem estrutura no banco. O cockpit foi carregado com dados parciais.
+            </div>
+          ) : null}
+
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               label="Ações críticas"

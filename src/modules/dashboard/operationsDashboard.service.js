@@ -82,6 +82,38 @@ function buildScreenContract() {
   };
 }
 
+function emptyIntelligence() {
+  return {
+    summary: {
+      critical_actions: 0,
+      high_actions: 0,
+      hot_leads: 0,
+      stock_alerts: 0
+    },
+    actions: []
+  };
+}
+
+function emptyPipeline() {
+  return {
+    totals: {
+      open_leads: 0,
+      overdue_sla: 0
+    },
+    stages: []
+  };
+}
+
+function captureSectionError(errors, key, result) {
+  if (result.status === "fulfilled") return result.value;
+  const reason = result.reason || {};
+  errors.push({
+    key,
+    message: reason.message || "Modulo indisponivel"
+  });
+  return null;
+}
+
 async function getOperationsDashboard(user, deps = {}) {
   const services = {
     getTodayIntelligence:
@@ -91,15 +123,23 @@ async function getOperationsDashboard(user, deps = {}) {
     getPipeline: deps.getPipeline || pipelineService.getPipeline
   };
 
-  const [intelligence, inbox, pipeline] = await Promise.all([
+  const errors = [];
+  const [intelligenceResult, inboxResult, pipelineResult] = await Promise.allSettled([
     services.getTodayIntelligence(user),
     services.listConversations(user, { status: "open", limit: 25, offset: 0 }),
     services.getPipeline(user)
   ]);
 
+  const intelligence =
+    captureSectionError(errors, "intelligence", intelligenceResult) || emptyIntelligence();
+  const inbox = captureSectionError(errors, "inbox", inboxResult) || [];
+  const pipeline = captureSectionError(errors, "pipeline", pipelineResult) || emptyPipeline();
+
   return {
     screen: buildScreenContract(),
     generated_at: new Date().toISOString(),
+    status: errors.length ? "partial" : "ok",
+    section_errors: errors,
     summary_cards: [
       {
         key: "critical_actions",

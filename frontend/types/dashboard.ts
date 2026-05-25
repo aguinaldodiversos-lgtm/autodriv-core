@@ -41,6 +41,11 @@ export type PipelineStage = {
 
 export type OperationsDashboard = {
   generated_at: string;
+  status?: "ok" | "partial";
+  section_errors?: Array<{
+    key: string;
+    message: string;
+  }>;
   summary_cards: MetricCard[];
   intelligence: {
     summary: Record<string, number>;

@@ -57,4 +57,28 @@ describe("operations dashboard contract", () => {
       )
     );
   });
+
+  test("degrada para dados parciais quando modulos operacionais ainda nao existem", async () => {
+    const result = await getOperationsDashboard(
+      { id: 10, dealership_id: 7 },
+      {
+        async getTodayIntelligence() {
+          throw new Error("relation intelligence_actions does not exist");
+        },
+        async listConversations() {
+          throw new Error("relation inbox_threads does not exist");
+        },
+        async getPipeline() {
+          throw new Error("relation pipeline_stages does not exist");
+        }
+      }
+    );
+
+    assert.strictEqual(result.status, "partial");
+    assert.strictEqual(result.section_errors.length, 3);
+    assert.deepStrictEqual(result.intelligence.actions, []);
+    assert.deepStrictEqual(result.inbox.conversations, []);
+    assert.deepStrictEqual(result.pipeline.stages, []);
+    assert.strictEqual(result.pipeline.summary.open_leads, 0);
+  });
 });

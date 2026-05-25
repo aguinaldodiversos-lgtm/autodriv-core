@@ -48,6 +48,7 @@ const migrations = [
   require("./migrations/041_finance_mvp"),
   require("./migrations/042_intelligence_priority_impact"),
   require("./migrations/043_vehicle_intake_details"),
+  require("./migrations/044_vehicle_fipe_reference_codes"),
 ];
 
 const path = require("path");

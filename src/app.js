@@ -208,6 +208,7 @@ const mountRoutes = [
   ["/api/approval-dashboard", require("./modules/approval_dashboard/approvalDashboard.routes")],
   ["/api/clients", require("./modules/clients/clients.routes")],
   ["/api/finance", require("./modules/finance/finance.routes")],
+  ["/api/fipe", require("./modules/fipe/fipe.routes")],
   ["/api/proposals", require("./modules/proposals/proposals.routes")],
   ["/api/tasks", require("./modules/tasks/tasks.routes")],
   ["/api/ads", require("./modules/ads/ads.routes")],

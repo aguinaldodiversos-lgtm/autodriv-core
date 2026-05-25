@@ -13,8 +13,10 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Table, Td, Th } from "@/components/ui/Table";
+import { getFipeValue, listFipeBrands, listFipeModels, listFipeYears } from "@/lib/api/fipe";
 import { formatCurrency } from "@/lib/utils/formatters";
 import { fuelOptions, getCatalogBrands, getCatalogModels, getYearOptions, transmissionOptions } from "@/lib/vehicles/catalog";
+import type { FipeBrand, FipeModel, FipeValue, FipeYear } from "@/types/fipe";
 import type { CreateVeiculoPayload, Veiculo } from "@/types/veiculo";
 
 const currentYear = new Date().getFullYear();
@@ -23,6 +25,11 @@ const initialForm = {
   brand: "",
   model: "",
   year: String(currentYear),
+  fipe_brand_code: "",
+  fipe_model_code: "",
+  fipe_year_code: "",
+  fipe_code: "",
+  fipe_reference_month: "",
   license_plate: "",
   version: "",
   color: "",
@@ -116,6 +123,11 @@ function formFromVehicle(veiculo: Veiculo): VehicleForm {
     brand: veiculo.brand || "",
     model: veiculo.model || "",
     year: String(veiculo.year || currentYear),
+    fipe_brand_code: veiculo.fipe_brand_code || "",
+    fipe_model_code: veiculo.fipe_model_code || "",
+    fipe_year_code: veiculo.fipe_year_code || "",
+    fipe_code: veiculo.fipe_code || "",
+    fipe_reference_month: veiculo.fipe_reference_month || "",
     license_plate: veiculo.license_plate || "",
     version: veiculo.version || "",
     color: veiculo.color || "",
@@ -157,6 +169,11 @@ export default function VeiculosPage() {
   const [editingVehicleId, setEditingVehicleId] = useState<number | null>(null);
   const [form, setForm] = useState(initialForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [fipeBrands, setFipeBrands] = useState<FipeBrand[]>([]);
+  const [fipeModels, setFipeModels] = useState<FipeModel[]>([]);
+  const [fipeYears, setFipeYears] = useState<FipeYear[]>([]);
+  const [fipeStatus, setFipeStatus] = useState<string | null>(null);
+  const [isFipeLoading, setIsFipeLoading] = useState(false);
 
   useEffect(() => {
     listVeiculos()
@@ -164,6 +181,22 @@ export default function VeiculosPage() {
       .catch((err) => setError(err instanceof Error ? err.message : "Erro ao carregar veiculos."))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!isModalOpen || fipeBrands.length > 0) return;
+
+    setIsFipeLoading(true);
+    setFipeStatus("Carregando marcas da FIPE...");
+    listFipeBrands()
+      .then((brands) => {
+        setFipeBrands(brands);
+        setFipeStatus(null);
+      })
+      .catch((err) => {
+        setFipeStatus(err instanceof Error ? err.message : "Nao foi possivel carregar a FIPE.");
+      })
+      .finally(() => setIsFipeLoading(false));
+  }, [fipeBrands.length, isModalOpen]);
 
   const brandOptions = useMemo(() => getCatalogBrands(veiculos.map((veiculo) => veiculo.brand)), [veiculos]);
   const modelOptions = useMemo(
@@ -211,6 +244,95 @@ export default function VeiculosPage() {
     });
   }
 
+  async function selectFipeBrand(code: string) {
+    const selected = fipeBrands.find((brand) => brand.code === code);
+    setForm((current) => ({
+      ...current,
+      fipe_brand_code: code,
+      fipe_model_code: "",
+      fipe_year_code: "",
+      fipe_code: "",
+      fipe_reference_month: "",
+      brand: selected?.name || current.brand,
+      model: "",
+      year: current.year,
+      fipe_price: ""
+    }));
+    setFipeModels([]);
+    setFipeYears([]);
+    if (!code) return;
+
+    setIsFipeLoading(true);
+    setFipeStatus("Carregando modelos da FIPE...");
+    try {
+      const response = await listFipeModels(code);
+      setFipeModels(response.models);
+      setFipeStatus(null);
+    } catch (err) {
+      setFipeStatus(err instanceof Error ? err.message : "Nao foi possivel carregar modelos FIPE.");
+    } finally {
+      setIsFipeLoading(false);
+    }
+  }
+
+  async function selectFipeModel(code: string) {
+    const selected = fipeModels.find((model) => model.code === code);
+    setForm((current) => ({
+      ...current,
+      fipe_model_code: code,
+      fipe_year_code: "",
+      fipe_code: "",
+      fipe_reference_month: "",
+      model: selected?.name || current.model,
+      fipe_price: ""
+    }));
+    setFipeYears([]);
+    if (!form.fipe_brand_code || !code) return;
+
+    setIsFipeLoading(true);
+    setFipeStatus("Carregando anos da FIPE...");
+    try {
+      const years = await listFipeYears(form.fipe_brand_code, code);
+      setFipeYears(years);
+      setFipeStatus(null);
+    } catch (err) {
+      setFipeStatus(err instanceof Error ? err.message : "Nao foi possivel carregar anos FIPE.");
+    } finally {
+      setIsFipeLoading(false);
+    }
+  }
+
+  function applyFipeValue(value: FipeValue, yearCode: string) {
+    setForm((current) => ({
+      ...current,
+      fipe_year_code: yearCode,
+      fipe_code: value.fipe_code || "",
+      fipe_reference_month: value.reference_month || "",
+      brand: value.brand || current.brand,
+      model: value.model || current.model,
+      year: value.year_model ? String(value.year_model) : current.year,
+      fuel: value.fuel || current.fuel,
+      fipe_price: value.value ? String(value.value) : current.fipe_price
+    }));
+  }
+
+  async function selectFipeYear(code: string) {
+    setForm((current) => ({ ...current, fipe_year_code: code }));
+    if (!form.fipe_brand_code || !form.fipe_model_code || !code) return;
+
+    setIsFipeLoading(true);
+    setFipeStatus("Consultando valor FIPE...");
+    try {
+      const value = await getFipeValue(form.fipe_brand_code, form.fipe_model_code, code);
+      applyFipeValue(value, code);
+      setFipeStatus(value.raw_value ? `FIPE encontrada: ${value.raw_value}` : "Referencia FIPE carregada.");
+    } catch (err) {
+      setFipeStatus(err instanceof Error ? err.message : "Nao foi possivel consultar valor FIPE.");
+    } finally {
+      setIsFipeLoading(false);
+    }
+  }
+
   function openCreateModal() {
     setEditingVehicleId(null);
     setForm(initialForm);
@@ -238,6 +360,11 @@ export default function VeiculosPage() {
       brand: form.brand.trim(),
       model: form.model.trim(),
       year: Number(form.year),
+      fipe_brand_code: form.fipe_brand_code || null,
+      fipe_model_code: form.fipe_model_code || null,
+      fipe_year_code: form.fipe_year_code || null,
+      fipe_code: form.fipe_code || null,
+      fipe_reference_month: form.fipe_reference_month || null,
       license_plate: form.license_plate.trim() || null,
       version: form.version.trim() || null,
       color: form.color.trim() || null,
@@ -372,8 +499,30 @@ export default function VeiculosPage() {
           <section>
             <h3 className="mb-3 text-sm font-semibold text-slate-950">Identificacao e catalogo</h3>
             <div className="grid gap-4 md:grid-cols-2">
-              <Input label="Marca" list="vehicle-brand-options" value={form.brand} onChange={(event) => updateField("brand", event.target.value)} required />
-              <Input label="Modelo" list="vehicle-model-options" value={form.model} onChange={(event) => updateField("model", event.target.value)} required />
+              <label className="block text-sm font-medium text-slate-700">
+                <span className="mb-2 block">Marca FIPE</span>
+                <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.fipe_brand_code} onChange={(event) => selectFipeBrand(event.target.value)}>
+                  <option value="">Selecionar marca</option>
+                  {fipeBrands.map((brand) => <option key={brand.code} value={brand.code}>{brand.name}</option>)}
+                </select>
+              </label>
+              <label className="block text-sm font-medium text-slate-700">
+                <span className="mb-2 block">Modelo FIPE</span>
+                <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.fipe_model_code} onChange={(event) => selectFipeModel(event.target.value)} disabled={!form.fipe_brand_code || isFipeLoading}>
+                  <option value="">Selecionar modelo</option>
+                  {fipeModels.map((model) => <option key={model.code} value={model.code}>{model.name}</option>)}
+                </select>
+              </label>
+              <label className="block text-sm font-medium text-slate-700">
+                <span className="mb-2 block">Ano/combustivel FIPE</span>
+                <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.fipe_year_code} onChange={(event) => selectFipeYear(event.target.value)} disabled={!form.fipe_model_code || isFipeLoading}>
+                  <option value="">Selecionar ano</option>
+                  {fipeYears.map((year) => <option key={year.code} value={year.code}>{year.name}</option>)}
+                </select>
+              </label>
+              <Input label="FIPE" inputMode="decimal" value={form.fipe_price} onChange={(event) => updateField("fipe_price", event.target.value)} placeholder="Carregada pela FIPE ou manual" />
+              <Input label="Marca cadastrada" list="vehicle-brand-options" value={form.brand} onChange={(event) => updateField("brand", event.target.value)} required />
+              <Input label="Modelo cadastrado" list="vehicle-model-options" value={form.model} onChange={(event) => updateField("model", event.target.value)} required />
               <Input label="Ano/modelo" list="vehicle-year-options" value={form.year} onChange={(event) => updateField("year", event.target.value)} required />
               <Input label="Versao" value={form.version} onChange={(event) => updateField("version", event.target.value)} placeholder="EXL 2.0, LTZ, Comfortline..." />
               <Input label="Placa" value={form.license_plate} onChange={(event) => updateField("license_plate", event.target.value.toUpperCase())} />
@@ -381,14 +530,15 @@ export default function VeiculosPage() {
               <Input label="Cor" value={form.color} onChange={(event) => updateField("color", event.target.value)} />
               <Input label="Combustivel" list="vehicle-fuel-options" value={form.fuel} onChange={(event) => updateField("fuel", event.target.value)} />
               <Input label="Cambio" list="vehicle-transmission-options" value={form.transmission} onChange={(event) => updateField("transmission", event.target.value)} />
-              <Input label="FIPE" inputMode="decimal" value={form.fipe_price} onChange={(event) => updateField("fipe_price", event.target.value)} placeholder="Preencha ou confirme a referencia" />
             </div>
             <datalist id="vehicle-brand-options">{brandOptions.map((brand) => <option key={brand} value={brand} />)}</datalist>
             <datalist id="vehicle-model-options">{modelOptions.map((model) => <option key={model} value={model} />)}</datalist>
             <datalist id="vehicle-year-options">{yearOptions.map((year) => <option key={year} value={year} />)}</datalist>
             <datalist id="vehicle-fuel-options">{fuelOptions.map((fuel) => <option key={fuel} value={fuel} />)}</datalist>
             <datalist id="vehicle-transmission-options">{transmissionOptions.map((item) => <option key={item} value={item} />)}</datalist>
-            <p className="mt-2 text-xs text-slate-500">Marca, modelo e ano usam autocomplete. A FIPE e reaproveitada quando ja existir referencia igual na sua base.</p>
+            <p className="mt-2 text-xs text-slate-500">
+              {fipeStatus || "Selecione marca, modelo e ano para buscar a FIPE automaticamente. Se a API estiver indisponivel, os campos cadastrados continuam editaveis."}
+            </p>
           </section>
 
           <section>

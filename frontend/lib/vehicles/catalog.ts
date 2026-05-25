@@ -5,8 +5,11 @@ export type VehicleCatalogBrand = {
 
 export const vehicleCatalog: VehicleCatalogBrand[] = [
   { brand: "Chevrolet", models: ["Onix", "Prisma", "Tracker", "Cruze", "S10", "Spin", "Cobalt"] },
+  { brand: "BYD", models: ["Dolphin", "Dolphin Mini", "Song Plus", "Yuan Plus", "Seal", "Tan", "Han"] },
+  { brand: "Caoa Chery", models: ["Tiggo 5X", "Tiggo 7", "Tiggo 8", "Arrizo 6"] },
   { brand: "Fiat", models: ["Argo", "Cronos", "Mobi", "Strada", "Toro", "Pulse", "Fastback", "Uno"] },
   { brand: "Ford", models: ["Ka", "EcoSport", "Ranger", "Fiesta", "Focus", "Territory"] },
+  { brand: "GWM", models: ["Haval H6", "Ora 03", "Tank 300"] },
   { brand: "Honda", models: ["Civic", "City", "Fit", "HR-V", "WR-V", "CR-V"] },
   { brand: "Hyundai", models: ["HB20", "Creta", "Tucson", "ix35", "Santa Fe"] },
   { brand: "Jeep", models: ["Renegade", "Compass", "Commander"] },

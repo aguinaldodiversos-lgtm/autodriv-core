@@ -4,6 +4,11 @@ export type Veiculo = {
   brand?: string | null;
   model?: string | null;
   year?: number | null;
+  fipe_brand_code?: string | null;
+  fipe_model_code?: string | null;
+  fipe_year_code?: string | null;
+  fipe_code?: string | null;
+  fipe_reference_month?: string | null;
   license_plate?: string | null;
   version?: string | null;
   color?: string | null;
@@ -47,6 +52,11 @@ export type CreateVeiculoPayload = {
   brand: string;
   model: string;
   year: number;
+  fipe_brand_code?: string | null;
+  fipe_model_code?: string | null;
+  fipe_year_code?: string | null;
+  fipe_code?: string | null;
+  fipe_reference_month?: string | null;
   license_plate?: string | null;
   version?: string | null;
   color?: string | null;

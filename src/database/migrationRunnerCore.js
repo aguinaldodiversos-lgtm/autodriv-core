@@ -44,7 +44,7 @@ async function fetchAppliedRows(client) {
   const { rows } = await client.query(
     `SELECT name, checksum, executed_at, execution_time_ms
      FROM schema_migrations
-     ORDER BY id ASC`
+     ORDER BY executed_at ASC NULLS FIRST, name ASC`
   );
   return rows;
 }

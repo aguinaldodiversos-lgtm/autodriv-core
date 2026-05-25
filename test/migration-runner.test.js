@@ -88,6 +88,21 @@ describe("runPendingMigrations (mock client)", () => {
     );
   });
 
+  test("consulta ledger sem depender de coluna id", async () => {
+    const c = createMockClient();
+    await runPendingMigrations(c, {
+      migrations: [],
+      computeChecksumForName: testChecksumForName,
+      log: { log: () => {} },
+    });
+
+    const select = c.calls.find((call) =>
+      String(call.sql).includes("SELECT name, checksum, executed_at")
+    );
+    assert.ok(select);
+    assert.ok(!String(select.sql).includes("ORDER BY id"));
+  });
+
   test("banco vazio: aplica todas e regista no ledger (2 migrations pequenas)", async () => {
     const c = createMockClient();
     const a = { name: "a_test_1", async up(client) { await client.query("SELECT 1"); } };

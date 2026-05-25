@@ -138,6 +138,7 @@ async function ensureAuthSchema(client) {
   await client.query(`
     ALTER TABLE subscriptions
       ADD COLUMN IF NOT EXISTS dealership_id INT,
+      ADD COLUMN IF NOT EXISTS email TEXT,
       ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'trial',
       ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active',
       ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMP,
@@ -222,9 +223,9 @@ async function register(req, res) {
 
     await client.query(
       `INSERT INTO subscriptions
-       (dealership_id, plan, status, current_period_end)
-       VALUES ($1,'trial','active',$2)`,
-      [dealership.id, trialEnd]
+       (dealership_id, email, plan, status, current_period_end)
+       VALUES ($1,$2,'trial','active',$3)`,
+      [dealership.id, normalizedEmail, trialEnd]
     );
 
     await client.query("COMMIT");

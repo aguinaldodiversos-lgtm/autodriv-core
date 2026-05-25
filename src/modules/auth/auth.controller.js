@@ -243,7 +243,13 @@ async function register(req, res) {
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Erro no registro:", err);
-    res.status(500).json({ error: "Erro no registro" });
+    res.status(500).json({
+      error: "Erro no registro",
+      code: err.code,
+      table: err.table,
+      column: err.column,
+      constraint: err.constraint
+    });
   } finally {
     client.release();
   }

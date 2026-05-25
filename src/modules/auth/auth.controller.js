@@ -130,6 +130,7 @@ async function ensureAuthSchema(client) {
       ADD COLUMN IF NOT EXISTS name TEXT,
       ADD COLUMN IF NOT EXISTS email TEXT,
       ADD COLUMN IF NOT EXISTS password_hash TEXT,
+      ADD COLUMN IF NOT EXISTS password TEXT,
       ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin',
       ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
   `);
@@ -200,8 +201,8 @@ async function register(req, res) {
 
     const userResult = await client.query(
       `INSERT INTO users
-       (dealership_id, name, email, password_hash, role)
-       VALUES ($1,$2,$3,$4,'admin')
+       (dealership_id, name, email, password_hash, password, role)
+       VALUES ($1,$2,$3,$4,$4,'admin')
        RETURNING *`,
       [
         dealership.id,
@@ -271,7 +272,10 @@ async function login(req, res) {
       return res.status(401).json({ error: "Usuário não encontrado" });
     }
 
-    const valid = await bcrypt.compare(password, user.password_hash);
+    const storedPasswordHash = user.password_hash || user.password;
+    const valid = storedPasswordHash
+      ? await bcrypt.compare(password, storedPasswordHash)
+      : false;
 
     if (!valid) {
       return res.status(401).json({ error: "Senha inválida" });

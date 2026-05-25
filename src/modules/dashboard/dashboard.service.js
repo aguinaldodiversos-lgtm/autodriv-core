@@ -89,7 +89,7 @@ async function getAlerts(user) {
   ========================= */
   const financeResult = await pool.query(
     `
-    SELECT COUNT(*) FROM financial_transactions
+    SELECT COUNT(*) FROM finance_entries
     WHERE dealership_id = $1
     AND status = 'pending'
     AND due_date < CURRENT_DATE

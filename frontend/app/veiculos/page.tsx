@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Plus } from "lucide-react";
-import { createVeiculo, listVeiculos } from "@/lib/api/veiculos";
+import { Pencil, Plus } from "lucide-react";
+import { createVeiculo, listVeiculos, updateVeiculo } from "@/lib/api/veiculos";
 import { AppShell } from "@/components/layout/AppShell";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Badge } from "@/components/ui/Badge";
@@ -16,20 +16,26 @@ import { Table, Td, Th } from "@/components/ui/Table";
 import { formatCurrency } from "@/lib/utils/formatters";
 import type { CreateVeiculoPayload, Veiculo } from "@/types/veiculo";
 
+const currentYear = new Date().getFullYear();
+
 const initialForm = {
   brand: "",
   model: "",
-  year: String(new Date().getFullYear()),
+  year: String(currentYear),
   price: "",
   fipe_price: "",
   purchase_price: "",
   acquisition_cost: "",
   acquisition_source: "",
+  preparation_cost_estimate: "",
+  preparation_cost_actual: "",
   status: "available",
   preparation_status: "not_started",
   ad_status: "draft",
   ad_quality_score: "0"
 };
+
+type VehicleForm = typeof initialForm;
 
 function toNumberOrNull(value: string) {
   if (!value.trim()) return null;
@@ -40,6 +46,53 @@ function toNumberOrNull(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function numberValue(value: number | string | null | undefined) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildVehicleName(veiculo: Veiculo) {
+  return veiculo.title || [veiculo.brand, veiculo.model, veiculo.year].filter(Boolean).join(" ") || "Veiculo sem nome";
+}
+
+function getTotalCost(veiculo: Veiculo) {
+  return (
+    numberValue(veiculo.purchase_price) +
+    numberValue(veiculo.acquisition_cost) +
+    numberValue(veiculo.preparation_cost_actual)
+  );
+}
+
+function getExpectedMargin(veiculo: Veiculo) {
+  return numberValue(veiculo.price) - getTotalCost(veiculo);
+}
+
+function formFromVehicle(veiculo: Veiculo): VehicleForm {
+  return {
+    brand: veiculo.brand || "",
+    model: veiculo.model || "",
+    year: String(veiculo.year || currentYear),
+    price: veiculo.price == null ? "" : String(veiculo.price),
+    fipe_price: veiculo.fipe_price == null ? "" : String(veiculo.fipe_price),
+    purchase_price: veiculo.purchase_price == null ? "" : String(veiculo.purchase_price),
+    acquisition_cost: veiculo.acquisition_cost == null ? "" : String(veiculo.acquisition_cost),
+    acquisition_source: veiculo.acquisition_source || "",
+    preparation_cost_estimate: veiculo.preparation_cost_estimate == null ? "" : String(veiculo.preparation_cost_estimate),
+    preparation_cost_actual: veiculo.preparation_cost_actual == null ? "" : String(veiculo.preparation_cost_actual),
+    status: veiculo.status || "available",
+    preparation_status: veiculo.preparation_status || "not_started",
+    ad_status: veiculo.ad_status || "draft",
+    ad_quality_score: String(veiculo.ad_quality_score || 0)
+  };
+}
+
+function statusTone(status: string | null | undefined) {
+  if (status === "sold") return "blue";
+  if (status === "reserved") return "amber";
+  if (status === "preparation") return "slate";
+  return "green";
+}
+
 export default function VeiculosPage() {
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [query, setQuery] = useState("");
@@ -47,6 +100,7 @@ export default function VeiculosPage() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingVehicleId, setEditingVehicleId] = useState<number | null>(null);
   const [form, setForm] = useState(initialForm);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -66,8 +120,43 @@ export default function VeiculosPage() {
     );
   }, [veiculos, query]);
 
-  function updateField(field: keyof typeof initialForm, value: string) {
+  const metrics = useMemo(() => {
+    const totalValue = veiculos.reduce((sum, veiculo) => sum + numberValue(veiculo.price), 0);
+    const totalCost = veiculos.reduce((sum, veiculo) => sum + getTotalCost(veiculo), 0);
+    const available = veiculos.filter((veiculo) => veiculo.status !== "sold").length;
+
+    return {
+      total: veiculos.length,
+      available,
+      totalValue,
+      expectedMargin: totalValue - totalCost
+    };
+  }, [veiculos]);
+
+  function updateField(field: keyof VehicleForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function openCreateModal() {
+    setEditingVehicleId(null);
+    setForm(initialForm);
+    setFormError(null);
+    setIsModalOpen(true);
+  }
+
+  function openEditModal(veiculo: Veiculo) {
+    setEditingVehicleId(veiculo.id);
+    setForm(formFromVehicle(veiculo));
+    setFormError(null);
+    setIsModalOpen(true);
+  }
+
+  function closeModal() {
+    if (isSaving) return;
+    setIsModalOpen(false);
+    setEditingVehicleId(null);
+    setForm(initialForm);
+    setFormError(null);
   }
 
   function buildPayload(): CreateVeiculoPayload {
@@ -80,31 +169,37 @@ export default function VeiculosPage() {
       purchase_price: toNumberOrNull(form.purchase_price),
       acquisition_cost: toNumberOrNull(form.acquisition_cost),
       acquisition_source: form.acquisition_source.trim() || null,
-      status: form.status,
       preparation_status: form.preparation_status,
+      preparation_cost_estimate: toNumberOrNull(form.preparation_cost_estimate),
+      preparation_cost_actual: toNumberOrNull(form.preparation_cost_actual),
+      status: form.status,
       ad_status: form.ad_status,
       ad_quality_score: Number(form.ad_quality_score || 0)
     };
   }
 
-  async function onCreateVehicle(event: FormEvent<HTMLFormElement>) {
+  async function onSubmitVehicle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
 
     const year = Number(form.year);
     if (!form.brand.trim() || !form.model.trim() || !Number.isInteger(year)) {
-      setFormError("Informe marca, modelo e ano valido para cadastrar o veiculo.");
+      setFormError("Informe marca, modelo e ano valido para salvar o veiculo.");
       return;
     }
 
     setIsSaving(true);
     try {
-      const created = await createVeiculo(buildPayload());
-      setVeiculos((current) => [created, ...current]);
-      setForm(initialForm);
-      setIsModalOpen(false);
+      if (editingVehicleId) {
+        const updated = await updateVeiculo(editingVehicleId, buildPayload());
+        setVeiculos((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      } else {
+        const created = await createVeiculo(buildPayload());
+        setVeiculos((current) => [created, ...current]);
+      }
+      closeModal();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Nao foi possivel cadastrar o veiculo.");
+      setFormError(err instanceof Error ? err.message : "Nao foi possivel salvar o veiculo.");
     } finally {
       setIsSaving(false);
     }
@@ -115,14 +210,21 @@ export default function VeiculosPage() {
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-950">Veiculos</h1>
-          <p className="mt-1 text-sm text-slate-500">Estoque, preco, status e qualidade comercial.</p>
+          <p className="mt-1 text-sm text-slate-500">Estoque, preco, custos e margem prevista por carro.</p>
         </div>
         <PermissionGate permission="veiculos:create">
-          <Button type="button" onClick={() => setIsModalOpen(true)}>
+          <Button type="button" onClick={openCreateModal}>
             <Plus className="h-4 w-4" /> Cadastrar veiculo
           </Button>
         </PermissionGate>
       </div>
+
+      <section className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card><CardContent><p className="text-sm text-slate-500">Total em estoque</p><p className="mt-2 text-2xl font-semibold text-slate-950">{metrics.total}</p></CardContent></Card>
+        <Card><CardContent><p className="text-sm text-slate-500">Disponiveis</p><p className="mt-2 text-2xl font-semibold text-slate-950">{metrics.available}</p></CardContent></Card>
+        <Card><CardContent><p className="text-sm text-slate-500">Valor anunciado</p><p className="mt-2 text-2xl font-semibold text-slate-950">{formatCurrency(metrics.totalValue)}</p></CardContent></Card>
+        <Card><CardContent><p className="text-sm text-slate-500">Margem prevista</p><p className="mt-2 text-2xl font-semibold text-slate-950">{formatCurrency(metrics.expectedMargin)}</p></CardContent></Card>
+      </section>
 
       <Card>
         <CardContent>
@@ -135,17 +237,45 @@ export default function VeiculosPage() {
           {filtered.length > 0 ? (
             <div className="mt-6">
               <Table>
-                <thead><tr><Th>Veiculo</Th><Th>Ano</Th><Th>Preco</Th><Th>Status</Th><Th>Anuncio</Th></tr></thead>
+                <thead>
+                  <tr>
+                    <Th>Veiculo</Th>
+                    <Th>Ano</Th>
+                    <Th>Preco</Th>
+                    <Th>Custo total</Th>
+                    <Th>Margem</Th>
+                    <Th>Status</Th>
+                    <Th>Anuncio</Th>
+                    <Th>Acoes</Th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {filtered.map((veiculo) => (
-                    <tr key={veiculo.id}>
-                      <Td>{veiculo.title || `${veiculo.brand || ""} ${veiculo.model || ""}`}</Td>
-                      <Td>{veiculo.year || "-"}</Td>
-                      <Td>{formatCurrency(veiculo.price)}</Td>
-                      <Td><Badge tone="green">{veiculo.status || "available"}</Badge></Td>
-                      <Td>{veiculo.ad_status || "-"}</Td>
-                    </tr>
-                  ))}
+                  {filtered.map((veiculo) => {
+                    const margin = getExpectedMargin(veiculo);
+                    return (
+                      <tr key={veiculo.id}>
+                        <Td>
+                          <div>
+                            <p className="font-medium text-slate-950">{buildVehicleName(veiculo)}</p>
+                            <p className="text-xs text-slate-500">{veiculo.acquisition_source || "Origem nao informada"}</p>
+                          </div>
+                        </Td>
+                        <Td>{veiculo.year || "-"}</Td>
+                        <Td>{formatCurrency(veiculo.price)}</Td>
+                        <Td>{formatCurrency(getTotalCost(veiculo))}</Td>
+                        <Td><span className={margin >= 0 ? "text-emerald-700" : "text-red-700"}>{formatCurrency(margin)}</span></Td>
+                        <Td><Badge tone={statusTone(veiculo.status)}>{veiculo.status || "available"}</Badge></Td>
+                        <Td>{veiculo.ad_status || "-"}</Td>
+                        <Td>
+                          <PermissionGate permission="veiculos:update">
+                            <Button type="button" variant="secondary" size="sm" onClick={() => openEditModal(veiculo)}>
+                              <Pencil className="h-3.5 w-3.5" /> Editar
+                            </Button>
+                          </PermissionGate>
+                        </Td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </Table>
             </div>
@@ -153,8 +283,8 @@ export default function VeiculosPage() {
         </CardContent>
       </Card>
 
-      <Modal open={isModalOpen} title="Cadastrar veiculo" onClose={() => setIsModalOpen(false)}>
-        <form className="space-y-5" onSubmit={onCreateVehicle}>
+      <Modal open={isModalOpen} title={editingVehicleId ? "Editar veiculo" : "Cadastrar veiculo"} onClose={closeModal}>
+        <form className="space-y-5" onSubmit={onSubmitVehicle}>
           <div className="grid gap-4 md:grid-cols-2">
             <Input label="Marca" value={form.brand} onChange={(event) => updateField("brand", event.target.value)} required />
             <Input label="Modelo" value={form.model} onChange={(event) => updateField("model", event.target.value)} required />
@@ -164,6 +294,8 @@ export default function VeiculosPage() {
             <Input label="Custo de compra" inputMode="decimal" value={form.purchase_price} onChange={(event) => updateField("purchase_price", event.target.value)} />
             <Input label="Custo adicional" inputMode="decimal" value={form.acquisition_cost} onChange={(event) => updateField("acquisition_cost", event.target.value)} />
             <Input label="Origem" value={form.acquisition_source} onChange={(event) => updateField("acquisition_source", event.target.value)} placeholder="Troca, compra direta, repasse" />
+            <Input label="Preparacao estimada" inputMode="decimal" value={form.preparation_cost_estimate} onChange={(event) => updateField("preparation_cost_estimate", event.target.value)} />
+            <Input label="Preparacao realizada" inputMode="decimal" value={form.preparation_cost_actual} onChange={(event) => updateField("preparation_cost_actual", event.target.value)} />
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -202,7 +334,7 @@ export default function VeiculosPage() {
           {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
 
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)} disabled={isSaving}>
+            <Button type="button" variant="secondary" onClick={closeModal} disabled={isSaving}>
               Cancelar
             </Button>
             <Button type="submit" disabled={isSaving}>

@@ -11,3 +11,10 @@ export function createVeiculo(payload: CreateVeiculoPayload) {
     body: payload
   });
 }
+
+export function updateVeiculo(id: number, payload: CreateVeiculoPayload) {
+  return apiFetch<Veiculo>(`/api/vehicles/${id}`, {
+    method: "PUT",
+    body: payload
+  });
+}

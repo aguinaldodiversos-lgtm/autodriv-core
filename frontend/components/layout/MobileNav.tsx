@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, Car, LayoutDashboard, UsersRound } from "lucide-react";
+import { Car, CircleDollarSign, LayoutDashboard, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 const items = [
   { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
   { href: "/leads", label: "Leads", icon: UsersRound },
   { href: "/veiculos", label: "Estoque", icon: Car },
-  { href: "/ia", label: "IA", icon: Bot }
+  { href: "/financeiro", label: "Caixa", icon: CircleDollarSign }
 ];
 
 export function MobileNav() {

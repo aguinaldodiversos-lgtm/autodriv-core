@@ -6,6 +6,7 @@ import {
   BarChart3,
   Bot,
   Car,
+  CircleDollarSign,
   FileText,
   LayoutDashboard,
   Settings,
@@ -20,6 +21,7 @@ const navItems = [
   { href: "/leads", label: "Leads", icon: UsersRound },
   { href: "/veiculos", label: "Veiculos", icon: Car },
   { href: "/contratos", label: "Contratos", icon: FileText },
+  { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
   { href: "/ia", label: "IA", icon: Bot },
   { href: "/configuracoes", label: "Configuracoes", icon: Settings }
 ];

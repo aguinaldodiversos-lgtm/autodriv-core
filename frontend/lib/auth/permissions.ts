@@ -15,6 +15,8 @@ export const permissions = [
   "contratos:create",
   "contratos:update",
   "financeiro:view",
+  "financeiro:create",
+  "financeiro:update",
   "ia:view",
   "ia:execute",
   "settings:view",
@@ -44,6 +46,8 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "contratos:create",
     "contratos:update",
     "financeiro:view",
+    "financeiro:create",
+    "financeiro:update",
     "ia:view",
     "ia:execute",
     "settings:view"
@@ -68,7 +72,9 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "leads:view",
     "veiculos:view",
     "contratos:view",
-    "financeiro:view"
+    "financeiro:view",
+    "financeiro:create",
+    "financeiro:update"
   ],
   operador: [
     "dashboard:view",

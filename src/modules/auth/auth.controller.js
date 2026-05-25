@@ -81,6 +81,76 @@ function generateToken(user) {
   );
 }
 
+async function ensureAuthSchema(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS dealerships (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE,
+      phone TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      dealership_id INT,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT,
+      role TEXT NOT NULL DEFAULT 'admin',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id SERIAL PRIMARY KEY,
+      dealership_id INT,
+      plan TEXT DEFAULT 'trial',
+      status TEXT DEFAULT 'active',
+      current_period_end TIMESTAMP,
+      mp_subscription_id TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    ALTER TABLE dealerships
+      ADD COLUMN IF NOT EXISTS email TEXT,
+      ADD COLUMN IF NOT EXISTS phone TEXT,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+  `);
+
+  await client.query(`
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS dealership_id INT,
+      ADD COLUMN IF NOT EXISTS name TEXT,
+      ADD COLUMN IF NOT EXISTS email TEXT,
+      ADD COLUMN IF NOT EXISTS password_hash TEXT,
+      ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin',
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+  `);
+
+  await client.query(`
+    ALTER TABLE subscriptions
+      ADD COLUMN IF NOT EXISTS dealership_id INT,
+      ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'trial',
+      ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active',
+      ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS mp_subscription_id TEXT,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_users_dealership
+    ON users (dealership_id);
+  `);
+}
+
 async function register(req, res) {
   const { dealership_name, name, email, password } = req.body;
 
@@ -95,6 +165,7 @@ async function register(req, res) {
   const client = await pool.connect();
 
   try {
+    await ensureAuthSchema(client);
     await client.query("BEGIN");
 
     // verifica se usuário já existe

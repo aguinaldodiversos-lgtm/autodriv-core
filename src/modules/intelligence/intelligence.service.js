@@ -10,8 +10,120 @@ function priorityLabel(score) {
   return "low";
 }
 
+function impactLabel(value) {
+  const numeric = Number(value || 0);
+  if (numeric >= 50000) return "very_high";
+  if (numeric >= 15000) return "high";
+  if (numeric >= 3000) return "medium";
+  return "operational";
+}
+
+function actionDefaults(type) {
+  const map = {
+    lead_followup: {
+      impact_area: "sales",
+      expected_outcome: "reply",
+      recommended_channel: "whatsapp"
+    },
+    visit_confirmation: {
+      impact_area: "sales",
+      expected_outcome: "appointment",
+      recommended_channel: "whatsapp"
+    },
+    lead_assignment: {
+      impact_area: "team",
+      expected_outcome: "reply",
+      recommended_channel: "crm"
+    },
+    stock_action: {
+      impact_area: "stock",
+      expected_outcome: "sale",
+      recommended_channel: "stock"
+    },
+    price_adjustment: {
+      impact_area: "stock",
+      expected_outcome: "sale",
+      recommended_channel: "stock"
+    },
+    stock_margin: {
+      impact_area: "finance",
+      expected_outcome: "sale",
+      recommended_channel: "stock"
+    },
+    ad_quality: {
+      impact_area: "marketing",
+      expected_outcome: "reply",
+      recommended_channel: "ads"
+    },
+    stock_preparation: {
+      impact_area: "stock",
+      expected_outcome: "sale",
+      recommended_channel: "stock"
+    },
+    inbox_reply: {
+      impact_area: "sales",
+      expected_outcome: "reply",
+      recommended_channel: "inbox"
+    },
+    inbox_claim: {
+      impact_area: "team",
+      expected_outcome: "reply",
+      recommended_channel: "inbox"
+    },
+    proposal_close: {
+      impact_area: "sales",
+      expected_outcome: "proposal",
+      recommended_channel: "whatsapp"
+    },
+    after_sales: {
+      impact_area: "retention",
+      expected_outcome: "repurchase",
+      recommended_channel: "whatsapp"
+    },
+    seller_attention: {
+      impact_area: "team",
+      expected_outcome: "reply",
+      recommended_channel: "crm"
+    },
+    overdue_task: {
+      impact_area: "operations",
+      expected_outcome: "no_result",
+      recommended_channel: "crm"
+    },
+    finance_overdue_receivable: {
+      impact_area: "finance",
+      expected_outcome: "no_result",
+      recommended_channel: "phone"
+    },
+    finance_due_expense: {
+      impact_area: "finance",
+      expected_outcome: "no_result",
+      recommended_channel: "finance"
+    },
+    finance_cash_risk: {
+      impact_area: "finance",
+      expected_outcome: "no_result",
+      recommended_channel: "finance"
+    },
+    vehicle_cost_leak: {
+      impact_area: "finance",
+      expected_outcome: "sale",
+      recommended_channel: "stock"
+    }
+  };
+
+  return map[type] || {
+    impact_area: "operations",
+    expected_outcome: "no_result",
+    recommended_channel: "crm"
+  };
+}
+
 function action(input) {
   const priority_score = Math.max(0, Math.min(100, Math.round(input.score)));
+  const defaults = actionDefaults(input.type);
+  const impact_estimate = input.impactEstimate ?? input.evidence?.impact_estimate ?? null;
+
   return {
     action_key: input.key,
     type: input.type,
@@ -21,7 +133,13 @@ function action(input) {
     priority_label: priorityLabel(priority_score),
     reason: input.reason,
     suggested_action: input.suggestedAction,
-    evidence: input.evidence || {}
+    evidence: input.evidence || {},
+    impact_area: input.impactArea || defaults.impact_area,
+    impact_label: input.impactLabel || impactLabel(impact_estimate),
+    impact_estimate,
+    urgency_label: input.urgencyLabel || priorityLabel(priority_score),
+    expected_outcome: input.expectedOutcome || defaults.expected_outcome,
+    recommended_channel: input.recommendedChannel || defaults.recommended_channel
   };
 }
 
@@ -30,6 +148,13 @@ function hoursSince(value) {
   const at = new Date(value).getTime();
   if (!Number.isFinite(at)) return null;
   return Math.max(0, (Date.now() - at) / (1000 * 60 * 60));
+}
+
+function daysUntil(value) {
+  if (!value) return null;
+  const at = new Date(value).getTime();
+  if (!Number.isFinite(at)) return null;
+  return Math.ceil((at - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
 async function leadActions(dealershipId) {
@@ -76,6 +201,7 @@ async function leadActions(dealershipId) {
           score: Math.min(100, score + Math.min(20, staleHours)),
           reason: `Lead quente sem interacao recente (${Math.round(staleHours)}h)`,
           suggestedAction: "Chamar o lead no WhatsApp ou ligar agora",
+          impactEstimate: null,
           evidence: {
             lead_id: lead.id,
             lead_name: lead.name,
@@ -97,6 +223,7 @@ async function leadActions(dealershipId) {
           score: 82,
           reason: "Lead com visita marcada precisa confirmacao ativa",
           suggestedAction: "Confirmar presenca e preparar o veiculo antes da visita",
+          impactEstimate: null,
           evidence: {
             lead_id: lead.id,
             lead_name: lead.name,
@@ -182,6 +309,7 @@ async function stockActions(dealershipId) {
           score: Math.min(100, 55 + Math.floor(days / 3)),
           reason: `Veiculo parado ha ${days} dias no estoque`,
           suggestedAction: "Revisar preco, fotos e criar campanha de giro",
+          impactEstimate: projectedMargin != null ? Math.max(projectedMargin, price * 0.05) : price * 0.05,
           evidence: {
             vehicle_id: vehicle.id,
             title: vehicle.title,
@@ -203,6 +331,7 @@ async function stockActions(dealershipId) {
           score: Math.min(100, 60 + fipeDiff * 2),
           reason: `Preco ${Math.round(fipeDiff)}% acima da FIPE`,
           suggestedAction: "Avaliar reducao de preco ou reforcar diferenciais do veiculo",
+          impactEstimate: price > 0 ? price * 0.03 : null,
           evidence: {
             vehicle_id: vehicle.id,
             title: vehicle.title,
@@ -224,6 +353,7 @@ async function stockActions(dealershipId) {
           score: 92,
           reason: "Margem projetada negativa no estoque",
           suggestedAction: "Bloquear desconto e revisar custo/preco antes de negociar",
+          impactEstimate: Math.abs(projectedMargin),
           evidence: {
             vehicle_id: vehicle.id,
             title: vehicle.title,
@@ -245,6 +375,7 @@ async function stockActions(dealershipId) {
           score: 74,
           reason: `Anuncio com qualidade baixa (${adQuality}/100)`,
           suggestedAction: "Melhorar fotos, descricao e dados obrigatorios do anuncio",
+          impactEstimate: price > 0 ? price * 0.02 : null,
           evidence: {
             vehicle_id: vehicle.id,
             title: vehicle.title,
@@ -265,6 +396,7 @@ async function stockActions(dealershipId) {
           score: 66,
           reason: "Preparacao do veiculo ainda pendente",
           suggestedAction: "Concluir preparacao para liberar fotos finais e venda ativa",
+          impactEstimate: price > 0 ? price * 0.03 : null,
           evidence: {
             vehicle_id: vehicle.id,
             title: vehicle.title,
@@ -398,6 +530,183 @@ async function proposalActions(dealershipId) {
     );
 }
 
+async function financeActions(dealershipId) {
+  const { rows: financeRows } = await pool.query(
+    `SELECT
+       f.id,
+       f.type,
+       f.category,
+       f.description,
+       f.amount,
+       f.due_date,
+       f.vehicle_id,
+       v.title AS vehicle_title
+     FROM finance_entries f
+     LEFT JOIN vehicles v ON v.id = f.vehicle_id
+     WHERE f.dealership_id = $1
+       AND f.status = 'pending'
+       AND (
+         f.due_date < CURRENT_DATE
+         OR f.due_date <= CURRENT_DATE + INTERVAL '7 days'
+       )
+     ORDER BY f.due_date ASC NULLS LAST, f.amount DESC
+     LIMIT 40`,
+    [dealershipId]
+  );
+
+  const actions = [];
+  for (const entry of financeRows) {
+    const amount = Number(entry.amount || 0);
+    const dueInDays = daysUntil(entry.due_date);
+    const overdue = dueInDays != null && dueInDays < 0;
+
+    if (entry.type === "income" && overdue) {
+      actions.push(
+        action({
+          key: `finance:${entry.id}:overdue-receivable`,
+          type: "finance_overdue_receivable",
+          entityType: "finance_entry",
+          entityId: entry.id,
+          score: Math.min(100, 72 + Math.abs(dueInDays) * 2 + Math.min(18, amount / 5000)),
+          reason: `Receita vencida ha ${Math.abs(dueInDays)} dias`,
+          suggestedAction: "Cobrar recebimento hoje e registrar retorno no financeiro",
+          impactEstimate: amount,
+          urgencyLabel: "critical",
+          evidence: {
+            finance_entry_id: entry.id,
+            amount,
+            due_date: entry.due_date,
+            category: entry.category,
+            vehicle_id: entry.vehicle_id,
+            vehicle_title: entry.vehicle_title
+          }
+        })
+      );
+    }
+
+    if (entry.type === "expense" && (overdue || dueInDays <= 3)) {
+      actions.push(
+        action({
+          key: `finance:${entry.id}:due-expense`,
+          type: "finance_due_expense",
+          entityType: "finance_entry",
+          entityId: entry.id,
+          score: Math.min(100, (overdue ? 76 : 58) + Math.min(20, amount / 3000)),
+          reason: overdue
+            ? `Despesa vencida ha ${Math.abs(dueInDays)} dias`
+            : `Despesa vence em ${dueInDays} dias`,
+          suggestedAction: "Priorizar pagamento, renegociar prazo ou reservar caixa",
+          impactEstimate: amount,
+          urgencyLabel: overdue ? "critical" : "high",
+          evidence: {
+            finance_entry_id: entry.id,
+            amount,
+            due_date: entry.due_date,
+            category: entry.category,
+            vehicle_id: entry.vehicle_id,
+            vehicle_title: entry.vehicle_title
+          }
+        })
+      );
+    }
+  }
+
+  const { rows: cashRows } = await pool.query(
+    `SELECT
+       COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS incoming,
+       COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS outgoing
+     FROM finance_entries
+     WHERE dealership_id = $1
+       AND status = 'pending'
+       AND due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'`,
+    [dealershipId]
+  );
+
+  const incoming = Number(cashRows[0]?.incoming || 0);
+  const outgoing = Number(cashRows[0]?.outgoing || 0);
+  if (outgoing > incoming && outgoing > 0) {
+    const gap = outgoing - incoming;
+    actions.push(
+      action({
+        key: `finance:cash-risk:${new Date().toISOString().slice(0, 10)}`,
+        type: "finance_cash_risk",
+        entityType: "finance",
+        entityId: null,
+        score: Math.min(100, 70 + Math.min(25, gap / 3000)),
+        reason: "Saidas previstas dos proximos 7 dias superam entradas",
+        suggestedAction: "Revisar contas da semana, antecipar recebiveis e segurar despesas nao essenciais",
+        impactEstimate: gap,
+        evidence: {
+          incoming_7_days: incoming,
+          outgoing_7_days: outgoing,
+          cash_gap: gap
+        }
+      })
+    );
+  }
+
+  const { rows: vehicleCostRows } = await pool.query(
+    `SELECT
+       v.id,
+       v.title,
+       v.price,
+       v.purchase_price,
+       v.acquisition_cost,
+       v.preparation_cost_actual,
+       COALESCE(SUM(CASE WHEN f.type = 'expense' THEN f.amount ELSE 0 END), 0) AS finance_expense
+     FROM vehicles v
+     LEFT JOIN finance_entries f
+       ON f.vehicle_id = v.id
+      AND f.dealership_id = v.dealership_id
+     WHERE v.dealership_id = $1
+       AND COALESCE(v.status, 'available') = 'available'
+     GROUP BY v.id
+     HAVING COALESCE(SUM(CASE WHEN f.type = 'expense' THEN f.amount ELSE 0 END), 0) > 0
+     ORDER BY finance_expense DESC
+     LIMIT 20`,
+    [dealershipId]
+  );
+
+  for (const vehicle of vehicleCostRows) {
+    const price = Number(vehicle.price || 0);
+    const purchase = Number(vehicle.purchase_price || 0);
+    const baseCost =
+      purchase +
+      Number(vehicle.acquisition_cost || 0) +
+      Number(vehicle.preparation_cost_actual || 0);
+    const financeExpense = Number(vehicle.finance_expense || 0);
+    const totalCost = baseCost + financeExpense;
+    const margin = price - totalCost;
+
+    if ((price > 0 && financeExpense / price >= 0.04) || margin < 0) {
+      actions.push(
+        action({
+          key: `vehicle:${vehicle.id}:finance-cost-leak`,
+          type: "vehicle_cost_leak",
+          entityType: "vehicle",
+          entityId: vehicle.id,
+          score: margin < 0 ? 90 : Math.min(88, 62 + Math.round((financeExpense / Math.max(price, 1)) * 100)),
+          reason: margin < 0
+            ? "Custos financeiros deixam o veiculo com margem negativa"
+            : "Custos financeiros ja consomem parte relevante da margem",
+          suggestedAction: "Revisar preco minimo, bloquear desconto e acelerar venda deste veiculo",
+          impactEstimate: Math.abs(Math.min(margin, financeExpense)),
+          evidence: {
+            vehicle_id: vehicle.id,
+            title: vehicle.title,
+            price,
+            base_cost: baseCost,
+            finance_expense: financeExpense,
+            projected_margin: margin
+          }
+        })
+      );
+    }
+  }
+
+  return actions;
+}
+
 async function afterSalesActions(dealershipId) {
   const { rows } = await pool.query(
     `SELECT *
@@ -514,12 +823,16 @@ function summarize(actions) {
     total_actions: actions.length,
     hot_leads: actions.filter((a) => a.type === "lead_followup").length,
     stock_alerts: actions.filter((a) =>
-      ["stock_action", "price_adjustment", "stock_margin", "ad_quality", "stock_preparation"].includes(a.type)
+      ["stock_action", "price_adjustment", "stock_margin", "ad_quality", "stock_preparation", "vehicle_cost_leak"].includes(a.type)
+    ).length,
+    finance_alerts: actions.filter((a) =>
+      ["finance_overdue_receivable", "finance_due_expense", "finance_cash_risk", "vehicle_cost_leak"].includes(a.type)
     ).length,
     seller_alerts: actions.filter((a) => a.type === "seller_attention").length,
     inbox_alerts: actions.filter((a) => a.type.startsWith("inbox_")).length,
     proposal_alerts: actions.filter((a) => a.type === "proposal_close").length,
-    after_sales_alerts: actions.filter((a) => a.type === "after_sales").length
+    after_sales_alerts: actions.filter((a) => a.type === "after_sales").length,
+    high_impact_actions: actions.filter((a) => ["very_high", "high"].includes(a.impact_label)).length
   };
 }
 
@@ -536,6 +849,7 @@ async function getTodayIntelligence(user) {
     ...(await inboxActions(dealershipId)),
     ...(await stockActions(dealershipId)),
     ...(await proposalActions(dealershipId)),
+    ...(await financeActions(dealershipId)),
     ...(await afterSalesActions(dealershipId)),
     ...(await sellerActions(dealershipId)),
     ...(await taskActions(dealershipId))
@@ -665,6 +979,9 @@ function normalizeMetricRow(row) {
   if ("outcome_value_total" in normalized) {
     normalized.outcome_value_total = toNumber(normalized.outcome_value_total);
   }
+  if ("estimated_impact_total" in normalized) {
+    normalized.estimated_impact_total = toNumber(normalized.estimated_impact_total);
+  }
   if ("average_priority_score" in normalized) {
     normalized.average_priority_score = Number(toNumber(normalized.average_priority_score).toFixed(1));
   }
@@ -704,6 +1021,15 @@ async function getLearningMetrics(user, options = {}) {
       return {
         ...normalized,
         positive_outcome_rate: pct(normalized.positive_outcomes, normalized.outcomes_recorded)
+      };
+    }),
+    by_impact_area: metrics.by_impact_area.map((row) => {
+      const normalized = normalizeMetricRow(row);
+      normalized.estimated_impact_total = toNumber(normalized.estimated_impact_total);
+      return {
+        ...normalized,
+        acceptance_rate: pct(normalized.accepted_actions, normalized.total_actions),
+        positive_outcome_rate: pct(normalized.positive_outcomes, normalized.accepted_actions)
       };
     })
   };

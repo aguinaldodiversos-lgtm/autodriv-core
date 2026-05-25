@@ -7,6 +7,12 @@ export type AiAction = {
   priority_label?: string;
   explanation?: string | null;
   status?: "pending" | "accepted" | "ignored";
+  impact_area?: string | null;
+  impact_label?: string | null;
+  impact_estimate?: number | string | null;
+  urgency_label?: string | null;
+  expected_outcome?: string | null;
+  recommended_channel?: string | null;
 };
 
 export type AiFeedbackStatus = "accepted" | "ignored";
@@ -85,6 +91,18 @@ export type AiLearningSeller = {
   positive_outcome_rate: number;
 };
 
+export type AiLearningImpactArea = {
+  impact_area: string;
+  total_actions: number;
+  accepted_actions: number;
+  outcomes_recorded: number;
+  positive_outcomes: number;
+  outcome_value_total: number;
+  estimated_impact_total: number;
+  acceptance_rate: number;
+  positive_outcome_rate: number;
+};
+
 export type AiLearningMetrics = {
   generated_at: string;
   period_days: number;
@@ -92,6 +110,7 @@ export type AiLearningMetrics = {
   by_outcome_type: AiLearningOutcomeType[];
   by_action_type: AiLearningActionType[];
   by_seller: AiLearningSeller[];
+  by_impact_area: AiLearningImpactArea[];
 };
 
 export type AiMessageResponse = {

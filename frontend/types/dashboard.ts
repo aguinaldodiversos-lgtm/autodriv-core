@@ -9,7 +9,7 @@ export type MetricCard = {
 export type IntelligenceAction = {
   id: number;
   type: string;
-  priority_label?: string;
+  priority_label?: string | null;
   priority_score?: number;
   reason: string;
   suggested_action: string;
@@ -17,6 +17,12 @@ export type IntelligenceAction = {
   entity_id?: number | null;
   explanation?: string | null;
   status?: "pending" | "accepted" | "ignored";
+  impact_area?: string | null;
+  impact_label?: string | null;
+  impact_estimate?: number | string | null;
+  urgency_label?: string | null;
+  expected_outcome?: string | null;
+  recommended_channel?: string | null;
 };
 
 export type InboxConversation = {

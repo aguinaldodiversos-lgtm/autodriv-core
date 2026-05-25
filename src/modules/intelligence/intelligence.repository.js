@@ -8,8 +8,9 @@ async function upsertActions(dealershipId, actions) {
       `INSERT INTO intelligence_actions
        (dealership_id, action_key, type, entity_type, entity_id, priority_score,
         priority_label, reason, suggested_action, evidence, explanation, status,
-        updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,'pending',NOW())
+        impact_area, impact_label, impact_estimate, urgency_label, expected_outcome,
+        recommended_channel, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,'pending',$12,$13,$14,$15,$16,$17,NOW())
        ON CONFLICT (dealership_id, action_key)
        DO UPDATE SET
          type = EXCLUDED.type,
@@ -21,6 +22,12 @@ async function upsertActions(dealershipId, actions) {
          suggested_action = EXCLUDED.suggested_action,
          evidence = EXCLUDED.evidence,
          explanation = EXCLUDED.explanation,
+         impact_area = EXCLUDED.impact_area,
+         impact_label = EXCLUDED.impact_label,
+         impact_estimate = EXCLUDED.impact_estimate,
+         urgency_label = EXCLUDED.urgency_label,
+         expected_outcome = EXCLUDED.expected_outcome,
+         recommended_channel = EXCLUDED.recommended_channel,
          updated_at = NOW()
        WHERE intelligence_actions.status = 'pending'
        RETURNING *`,
@@ -35,7 +42,13 @@ async function upsertActions(dealershipId, actions) {
         action.reason,
         action.suggested_action,
         JSON.stringify(action.evidence || {}),
-        action.explanation || null
+        action.explanation || null,
+        action.impact_area || null,
+        action.impact_label || null,
+        action.impact_estimate ?? null,
+        action.urgency_label || null,
+        action.expected_outcome || null,
+        action.recommended_channel || null
       ]
     );
 
@@ -201,11 +214,32 @@ async function getLearningMetrics(dealershipId, days = 90) {
     params
   );
 
+  const byImpactArea = await pool.query(
+    `SELECT
+       COALESCE(a.impact_area, 'operations') AS impact_area,
+       COUNT(*)::int AS total_actions,
+       COUNT(*) FILTER (WHERE a.status = 'accepted')::int AS accepted_actions,
+       COUNT(o.id)::int AS outcomes_recorded,
+       COUNT(o.id) FILTER (WHERE o.outcome_type <> 'no_result')::int AS positive_outcomes,
+       COALESCE(SUM(o.outcome_value), 0) AS outcome_value_total,
+       COALESCE(SUM(a.impact_estimate), 0) AS estimated_impact_total
+     FROM intelligence_actions a
+     LEFT JOIN intelligence_action_outcomes o
+       ON o.action_id = a.id
+      AND o.dealership_id = a.dealership_id
+     WHERE a.dealership_id = $1
+       AND a.created_at >= NOW() - ($2::int * INTERVAL '1 day')
+     GROUP BY COALESCE(a.impact_area, 'operations')
+     ORDER BY outcome_value_total DESC, positive_outcomes DESC, total_actions DESC`,
+    params
+  );
+
   return {
     summary: summary.rows[0] || {},
     by_outcome_type: byOutcomeType.rows,
     by_action_type: byActionType.rows,
-    by_seller: bySeller.rows
+    by_seller: bySeller.rows,
+    by_impact_area: byImpactArea.rows
   };
 }
 

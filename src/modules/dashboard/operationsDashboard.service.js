@@ -49,6 +49,11 @@ function buildScreenContract() {
         key: "pipeline",
         title: "Funil comercial",
         endpoint: "/api/pipeline"
+      },
+      {
+        key: "finance",
+        title: "Financeiro e margem",
+        endpoint: "/api/finance/summary"
       }
     ],
     primary_actions: [

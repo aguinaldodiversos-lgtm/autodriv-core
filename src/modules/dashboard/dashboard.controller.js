@@ -235,6 +235,16 @@ async function intelligenceActions(req, res) {
           key: "stock_alerts",
           label: "Estoque",
           value: data.summary.stock_alerts
+        },
+        {
+          key: "finance_alerts",
+          label: "Financeiro",
+          value: data.summary.finance_alerts || 0
+        },
+        {
+          key: "high_impact_actions",
+          label: "Maior impacto",
+          value: data.summary.high_impact_actions || 0
         }
       ],
       generated_at: data.generated_at,

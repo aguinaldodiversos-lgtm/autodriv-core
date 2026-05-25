@@ -245,6 +245,7 @@ async function register(req, res) {
     console.error("Erro no registro:", err);
     res.status(500).json({
       error: "Erro no registro",
+      message: err.message ? String(err.message).slice(0, 240) : undefined,
       code: err.code,
       table: err.table,
       column: err.column,

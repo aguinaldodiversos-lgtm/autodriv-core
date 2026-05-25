@@ -13,3 +13,18 @@ export type Veiculo = {
   preparation_status?: string | null;
   created_at?: string;
 };
+
+export type CreateVeiculoPayload = {
+  brand: string;
+  model: string;
+  year: number;
+  price?: number | null;
+  fipe_price?: number | null;
+  status?: string;
+  purchase_price?: number | null;
+  acquisition_cost?: number | null;
+  acquisition_source?: string | null;
+  preparation_status?: string;
+  ad_status?: string;
+  ad_quality_score?: number;
+};

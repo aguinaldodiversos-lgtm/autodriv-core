@@ -13,7 +13,7 @@ export function Modal({ open, title, children, onClose }: ModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-      <div className="w-full max-w-lg rounded-lg bg-white shadow-soft">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white shadow-soft">
         <div className="flex items-center justify-between border-b border-slate-100 p-5">
           <h2 className="text-base font-semibold text-slate-950">{title}</h2>
           <Button variant="ghost" onClick={onClose}>Fechar</Button>

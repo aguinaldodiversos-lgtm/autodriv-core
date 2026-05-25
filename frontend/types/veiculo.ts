@@ -4,6 +4,12 @@ export type Veiculo = {
   brand?: string | null;
   model?: string | null;
   year?: number | null;
+  license_plate?: string | null;
+  version?: string | null;
+  color?: string | null;
+  fuel?: string | null;
+  transmission?: string | null;
+  mileage?: number | null;
   price?: number | string | null;
   fipe_price?: number | string | null;
   purchase_price?: number | string | null;
@@ -11,6 +17,23 @@ export type Veiculo = {
   acquisition_source?: string | null;
   preparation_cost_estimate?: number | string | null;
   preparation_cost_actual?: number | string | null;
+  notes?: string | null;
+  repair_notes?: string | null;
+  preparation_items?: Array<{
+    description?: string;
+    estimated_cost?: number;
+    actual_cost?: number;
+    status?: string;
+  }> | null;
+  images?: Array<{
+    id: number;
+    image_url: string;
+    is_main?: boolean | null;
+    is_cover?: boolean | null;
+    sort_order?: number | null;
+    label?: string | null;
+    notes?: string | null;
+  }>;
   ad_quality_score?: number | null;
   is_featured?: boolean | null;
   status?: string | null;
@@ -24,6 +47,12 @@ export type CreateVeiculoPayload = {
   brand: string;
   model: string;
   year: number;
+  license_plate?: string | null;
+  version?: string | null;
+  color?: string | null;
+  fuel?: string | null;
+  transmission?: string | null;
+  mileage?: number | null;
   price?: number | null;
   fipe_price?: number | null;
   status?: string;
@@ -33,6 +62,15 @@ export type CreateVeiculoPayload = {
   preparation_status?: string;
   preparation_cost_estimate?: number | null;
   preparation_cost_actual?: number | null;
+  notes?: string | null;
+  repair_notes?: string | null;
+  preparation_items?: Array<{
+    description: string;
+    estimated_cost?: number | null;
+    actual_cost?: number | null;
+    status?: string;
+  }>;
+  image_urls?: string[];
   ad_status?: string;
   ad_quality_score?: number;
 };

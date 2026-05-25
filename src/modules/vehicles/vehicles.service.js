@@ -54,6 +54,12 @@ function buildVehiclePayload(data, dealership) {
     brand: data.brand,
     model: data.model,
     year: data.year,
+    license_plate: data.license_plate ?? null,
+    version: data.version ?? null,
+    color: data.color ?? null,
+    fuel: data.fuel ?? null,
+    transmission: data.transmission ?? null,
+    mileage: data.mileage ?? null,
     price: data.price ?? 0,
     fipe_price: data.fipe_price ?? null,
     status: data.status || "available",
@@ -67,6 +73,11 @@ function buildVehiclePayload(data, dealership) {
     preparation_status: data.preparation_status || "not_started",
     preparation_cost_estimate: data.preparation_cost_estimate ?? 0,
     preparation_cost_actual: data.preparation_cost_actual ?? 0,
+    notes: data.notes ?? null,
+    repair_notes: data.repair_notes ?? null,
+    preparation_items: Array.isArray(data.preparation_items)
+      ? data.preparation_items
+      : [],
     ad_quality_score: data.ad_quality_score ?? 0,
     ad_status: data.ad_status || "draft"
   };
@@ -76,10 +87,16 @@ async function createVehicle(data, user) {
   const dealershipId = getDealershipId(user);
   const dealership = await getDealership(dealershipId);
 
-  return repo.create({
+  const vehicle = await repo.create({
     dealership_id: dealershipId,
     ...buildVehiclePayload(data, dealership)
   });
+
+  if (Array.isArray(data.image_urls) && data.image_urls.length) {
+    await repo.addImageUrls(vehicle.id, dealershipId, data.image_urls);
+  }
+
+  return repo.findById(vehicle.id, dealershipId);
 }
 
 async function listVehicles(user) {
@@ -110,11 +127,17 @@ async function updateVehicle(id, data, user) {
     ...data
   };
 
-  return repo.update(
+  const updated = await repo.update(
     id,
     dealershipId,
     buildVehiclePayload(merged, dealership)
   );
+
+  if (Array.isArray(data.image_urls)) {
+    await repo.addImageUrls(id, dealershipId, data.image_urls);
+  }
+
+  return repo.findById(updated.id, dealershipId);
 }
 
 async function deleteVehicle(id, user) {

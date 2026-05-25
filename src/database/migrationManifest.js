@@ -47,6 +47,7 @@ const migrations = [
   require("./migrations/040_intelligence_action_outcomes"),
   require("./migrations/041_finance_mvp"),
   require("./migrations/042_intelligence_priority_impact"),
+  require("./migrations/043_vehicle_intake_details"),
 ];
 
 const path = require("path");

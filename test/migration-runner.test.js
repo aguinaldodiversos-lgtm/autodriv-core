@@ -7,7 +7,7 @@ const path = require("path");
 function testChecksumForName(name) {
   return crypto.createHash("sha256").update(`test:${name}`, "utf8").digest("hex");
 }
-const { runPendingMigrations, insertBaselineWithoutRunning } = require(
+const { ensureSchemaMigrationsTable, runPendingMigrations, insertBaselineWithoutRunning } = require(
   path.join("..", "src", "database", "migrationRunnerCore")
 );
 const { MIGRATIONS, computeChecksumForName } = require(
@@ -78,6 +78,16 @@ function createMockClient() {
 }
 
 describe("runPendingMigrations (mock client)", () => {
+  test("normaliza ledger antigo adicionando colunas novas antes de consultar", async () => {
+    const c = createMockClient();
+    await ensureSchemaMigrationsTable(c);
+    assert.ok(
+      c.calls.some((call) =>
+        String(call.sql).includes("ALTER TABLE schema_migrations")
+      )
+    );
+  });
+
   test("banco vazio: aplica todas e regista no ledger (2 migrations pequenas)", async () => {
     const c = createMockClient();
     const a = { name: "a_test_1", async up(client) { await client.query("SELECT 1"); } };

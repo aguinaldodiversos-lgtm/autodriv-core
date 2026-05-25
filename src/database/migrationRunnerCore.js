@@ -24,11 +24,19 @@ const CREATE_LEDGER_INDEX_SQL = `
 CREATE INDEX IF NOT EXISTS idx_schema_migrations_name ON schema_migrations (name);
 `;
 
+const ALTER_LEDGER_SQL = `
+ALTER TABLE schema_migrations
+  ADD COLUMN IF NOT EXISTS checksum TEXT,
+  ADD COLUMN IF NOT EXISTS executed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS execution_time_ms INTEGER;
+`;
+
 /**
  * Cria tabela de ledger (idempotente). Não entra no fluxo de transação das migrations.
  */
 async function ensureSchemaMigrationsTable(client) {
   await client.query(CREATE_LEDGER_SQL);
+  await client.query(ALTER_LEDGER_SQL);
   await client.query(CREATE_LEDGER_INDEX_SQL);
 }
 
@@ -187,4 +195,5 @@ module.exports = {
   runPendingMigrations,
   insertBaselineWithoutRunning,
   CREATE_LEDGER_SQL,
+  ALTER_LEDGER_SQL,
 };

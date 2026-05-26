@@ -25,9 +25,47 @@ function calculateVehicleSignals(vehicle) {
   const marginPercent = margin != null && price > 0 ? (margin / price) * 100 : null;
   const fipeDiffPercent = price && fipe ? ((price - fipe) / fipe) * 100 : null;
   const daysInStock = Number(vehicle.days_in_stock || 0);
-  const adQuality = Number(vehicle.ad_quality_score || 0);
+  const imageCount = Number(vehicle.image_count || 0);
+  const hasMainImage = Boolean(vehicle.has_main_image);
+  const pendingPreparationTasks = Number(vehicle.pending_preparation_tasks || 0);
+  const completedPreparationTasks = Number(vehicle.completed_preparation_tasks || 0);
+  const requiredData = [
+    Boolean(vehicle.version),
+    vehicle.mileage != null && Number(vehicle.mileage) > 0,
+    Boolean(vehicle.color),
+    Boolean(vehicle.transmission),
+    Boolean(vehicle.fuel)
+  ];
+  const requiredDataScore = requiredData.filter(Boolean).length;
+
+  let adQuality = 0;
+  adQuality += hasMainImage ? 15 : 0;
+  adQuality += Math.min(25, imageCount * 4);
+  adQuality += requiredDataScore * 8;
+  adQuality += fipe > 0 ? 10 : 0;
+  adQuality += price > 0 ? 5 : 0;
+  adQuality += marginPercent != null && marginPercent >= 8 ? 5 : 0;
+  adQuality = Math.max(0, Math.min(100, Math.round(adQuality)));
 
   const suggestions = [];
+  if (!hasMainImage || imageCount < 6) {
+    suggestions.push({
+      type: "missing_photos",
+      priority: imageCount === 0 ? 82 : 68,
+      action: imageCount === 0 ? "Adicionar foto principal do veiculo" : "Adicionar mais fotos ao anuncio",
+      reason: imageCount === 0
+        ? "Anuncio sem foto principal reduz conversao"
+        : `Anuncio tem ${imageCount} fotos; ideal minimo e 6`
+    });
+  }
+  if (requiredDataScore < requiredData.length) {
+    suggestions.push({
+      type: "missing_ad_data",
+      priority: 58 + (requiredData.length - requiredDataScore) * 4,
+      action: "Completar versao, KM, cor, cambio e combustivel",
+      reason: `Cadastro tem ${requiredDataScore}/${requiredData.length} dados essenciais do anuncio`
+    });
+  }
   if (daysInStock >= 60) {
     suggestions.push({
       type: "aging_stock",
@@ -40,14 +78,16 @@ function calculateVehicleSignals(vehicle) {
     suggestions.push({
       type: "price_above_fipe",
       priority: Math.min(100, 60 + Math.round(fipeDiffPercent * 2)),
-      action: "Avaliar reducao de preco ou justificar diferenciais no anuncio",
+      action: fipeDiffPercent >= 12
+        ? `Revisar preco: esta ${Math.round(fipeDiffPercent)}% acima da FIPE`
+        : "Justificar diferenciais no anuncio ou revisar preco",
       reason: `Preco ${Math.round(fipeDiffPercent)}% acima da FIPE`
     });
   }
-  if (adQuality > 0 && adQuality < 60) {
+  if (adQuality < 70) {
     suggestions.push({
       type: "bad_ad_quality",
-      priority: 70,
+      priority: 70 + Math.max(0, Math.round((60 - adQuality) / 3)),
       action: "Melhorar fotos, descricao e dados do anuncio",
       reason: `Qualidade do anuncio em ${adQuality}/100`
     });
@@ -59,13 +99,22 @@ function calculateVehicleSignals(vehicle) {
       action: "Bloquear desconto e revisar custo/preco antes de negociar",
       reason: "Margem projetada negativa"
     });
+  } else if (marginPercent != null && marginPercent < 8) {
+    suggestions.push({
+      type: "low_margin",
+      priority: 78,
+      action: "Margem baixa, nao conceder desconto sem aprovacao",
+      reason: `Margem prevista em ${marginPercent.toFixed(1)}%`
+    });
   }
-  if (vehicle.preparation_status !== "done" && daysInStock >= 7) {
+  if (vehicle.preparation_status !== "done" || pendingPreparationTasks > 0) {
     suggestions.push({
       type: "preparation_delay",
-      priority: 65,
+      priority: daysInStock >= 7 ? 68 : 56,
       action: "Concluir preparacao para liberar venda e fotos finais",
-      reason: "Preparacao pendente atrasa giro do estoque"
+      reason: pendingPreparationTasks > 0
+        ? `${pendingPreparationTasks} etapa(s) de preparacao pendente(s)`
+        : "Preparacao pendente atrasa giro do estoque"
     });
   }
 
@@ -77,6 +126,23 @@ function calculateVehicleSignals(vehicle) {
     margin_percent: marginPercent == null ? null : Number(marginPercent.toFixed(1)),
     fipe_difference_percent: fipeDiffPercent == null ? null : Number(fipeDiffPercent.toFixed(1)),
     days_in_stock: daysInStock,
+    ad_quality_score: adQuality,
+    image_count: imageCount,
+    has_main_image: hasMainImage,
+    preparation_tasks_total: pendingPreparationTasks + completedPreparationTasks,
+    pending_preparation_tasks: pendingPreparationTasks,
+    checklist: {
+      has_main_photo: hasMainImage,
+      has_minimum_photos: imageCount >= 6,
+      has_version: Boolean(vehicle.version),
+      has_mileage: vehicle.mileage != null && Number(vehicle.mileage) > 0,
+      has_color: Boolean(vehicle.color),
+      has_transmission: Boolean(vehicle.transmission),
+      has_fuel: Boolean(vehicle.fuel),
+      has_fipe_reference: fipe > 0,
+      has_healthy_margin: marginPercent != null && marginPercent >= 8,
+      is_not_aging: daysInStock < 60
+    },
     suggestions: suggestions.sort((a, b) => b.priority - a.priority)
   };
 }
@@ -87,8 +153,10 @@ async function listStock(user) {
     `SELECT
        v.*,
        FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(v.entry_date, v.created_at))) / 86400)::int AS days_in_stock,
-       COUNT(vi.id)::int AS image_count,
-       COUNT(vpt.id) FILTER (WHERE vpt.status <> 'done')::int AS pending_preparation_tasks
+       COUNT(DISTINCT vi.id)::int AS image_count,
+       BOOL_OR(COALESCE(vi.is_main, false) OR COALESCE(vi.is_cover, false)) AS has_main_image,
+       COUNT(DISTINCT vpt.id) FILTER (WHERE vpt.status <> 'done')::int AS pending_preparation_tasks,
+       COUNT(DISTINCT vpt.id) FILTER (WHERE vpt.status = 'done')::int AS completed_preparation_tasks
      FROM vehicles v
      LEFT JOIN vehicle_images vi ON vi.vehicle_id = v.id
      LEFT JOIN vehicle_preparation_tasks vpt ON vpt.vehicle_id = v.id
@@ -110,9 +178,16 @@ async function getVehicleIntelligence(user, vehicleId) {
   const { rows } = await pool.query(
     `SELECT
        v.*,
-       FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(v.entry_date, v.created_at))) / 86400)::int AS days_in_stock
+       FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(v.entry_date, v.created_at))) / 86400)::int AS days_in_stock,
+       COUNT(DISTINCT vi.id)::int AS image_count,
+       BOOL_OR(COALESCE(vi.is_main, false) OR COALESCE(vi.is_cover, false)) AS has_main_image,
+       COUNT(DISTINCT vpt.id) FILTER (WHERE vpt.status <> 'done')::int AS pending_preparation_tasks,
+       COUNT(DISTINCT vpt.id) FILTER (WHERE vpt.status = 'done')::int AS completed_preparation_tasks
      FROM vehicles v
-     WHERE v.id = $1 AND v.dealership_id = $2`,
+     LEFT JOIN vehicle_images vi ON vi.vehicle_id = v.id
+     LEFT JOIN vehicle_preparation_tasks vpt ON vpt.vehicle_id = v.id
+     WHERE v.id = $1 AND v.dealership_id = $2
+     GROUP BY v.id`,
     [vehicleId, did]
   );
   if (!rows[0]) throw httpError("Veiculo nao encontrado", 404);
@@ -181,9 +256,10 @@ async function updateStockProfile(user, vehicleId, data) {
     ]
   );
   if (!rows[0]) throw httpError("Veiculo nao encontrado", 404);
+  const detailed = await getVehicleIntelligence(user, vehicleId);
   return {
     vehicle: rows[0],
-    intelligence: calculateVehicleSignals(rows[0])
+    intelligence: detailed.intelligence
   };
 }
 
@@ -217,7 +293,11 @@ async function createAppraisal(user, vehicleId, data) {
     `UPDATE vehicles
      SET appraisal_status = 'done',
          appraised_at = NOW(),
-         preparation_cost_estimate = COALESCE($1, preparation_cost_estimate)
+         preparation_cost_estimate = COALESCE($1, preparation_cost_estimate),
+         preparation_status = CASE
+           WHEN preparation_status = 'not_started' THEN 'in_progress'
+           ELSE preparation_status
+         END
      WHERE id = $2 AND dealership_id = $3`,
     [data.estimated_repair_cost ?? null, vehicleId, did]
   );
@@ -255,6 +335,7 @@ async function upsertPreparationTask(user, vehicleId, data) {
       ]
     );
     if (!rows[0]) throw httpError("Tarefa de preparacao nao encontrada", 404);
+    await refreshVehiclePreparationTotals(pool, vehicleId, did);
     return rows[0];
   }
 
@@ -274,7 +355,40 @@ async function upsertPreparationTask(user, vehicleId, data) {
       data.due_at || null
     ]
   );
+  await refreshVehiclePreparationTotals(pool, vehicleId, did);
   return rows[0];
+}
+
+async function refreshVehiclePreparationTotals(client, vehicleId, dealershipId) {
+  await client.query(
+    `UPDATE vehicles v
+     SET preparation_cost_estimate = COALESCE(t.estimated_total, 0),
+         preparation_cost_actual = COALESCE(t.actual_total, 0),
+         preparation_status = CASE
+           WHEN COALESCE(t.total_tasks, 0) = 0 THEN COALESCE(v.preparation_status, 'not_started')
+           WHEN COALESCE(t.done_tasks, 0) = COALESCE(t.total_tasks, 0) THEN 'done'
+           WHEN COALESCE(t.done_tasks, 0) > 0 OR COALESCE(t.doing_tasks, 0) > 0 THEN 'in_progress'
+           ELSE 'not_started'
+         END
+     FROM (
+       SELECT
+         vehicle_id,
+         COUNT(*)::int AS total_tasks,
+         COUNT(*) FILTER (WHERE status = 'done')::int AS done_tasks,
+         COUNT(*) FILTER (WHERE status = 'doing')::int AS doing_tasks,
+         SUM(COALESCE(estimated_cost, 0)) AS estimated_total,
+         SUM(COALESCE(actual_cost, 0)) AS actual_total
+       FROM vehicle_preparation_tasks
+       WHERE vehicle_id = $1
+         AND dealership_id = $2
+         AND status <> 'cancelled'
+       GROUP BY vehicle_id
+     ) t
+     WHERE v.id = t.vehicle_id
+       AND v.id = $1
+       AND v.dealership_id = $2`,
+    [vehicleId, dealershipId]
+  );
 }
 
 module.exports = {

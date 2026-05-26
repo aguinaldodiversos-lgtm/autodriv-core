@@ -4,9 +4,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Camera, ImagePlus, Pencil, Plus, Trash2, Wrench } from "lucide-react";
+import { AlertTriangle, Camera, CheckCircle2, ImagePlus, Pencil, Plus, Trash2, Wrench } from "lucide-react";
 import { createVeiculo, listVeiculos, updateVeiculo } from "@/lib/api/veiculos";
 import { uploadVehicleImage } from "@/lib/api/images";
+import { getVehicleIntelligence, listStockIntelligence, upsertVehiclePreparationTask } from "@/lib/api/stock-intelligence";
 import { AppShell } from "@/components/layout/AppShell";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Badge } from "@/components/ui/Badge";
@@ -20,6 +21,7 @@ import { getFipeValue, listFipeBrands, listFipeModels, listFipeYears } from "@/l
 import { formatCurrency } from "@/lib/utils/formatters";
 import { fuelOptions, getCatalogBrands, getCatalogModels, getYearOptions, transmissionOptions } from "@/lib/vehicles/catalog";
 import type { FipeBrand, FipeModel, FipeValue, FipeYear } from "@/types/fipe";
+import type { StockVehicle, VehicleIntelligence, VehicleIntelligenceDetail, VehiclePreparationTask } from "@/types/stock-intelligence";
 import type { CreateVeiculoPayload, Veiculo } from "@/types/veiculo";
 
 const currentYear = new Date().getFullYear();
@@ -57,6 +59,16 @@ const initialForm = {
 };
 
 type VehicleForm = typeof initialForm;
+
+const initialPreparationTaskForm = {
+  title: "",
+  status: "pending" as VehiclePreparationTask["status"],
+  estimated_cost: "",
+  actual_cost: "",
+  supplier: ""
+};
+
+type PreparationTaskForm = typeof initialPreparationTaskForm;
 
 function toNumberOrNull(value: string) {
   if (!value.trim()) return null;
@@ -162,6 +174,46 @@ function statusTone(status: string | null | undefined) {
   return "green";
 }
 
+function scoreTone(score: number | null | undefined) {
+  const value = Number(score || 0);
+  if (value >= 80) return "green";
+  if (value >= 60) return "amber";
+  return "red";
+}
+
+function taskStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    pending: "Pendente",
+    doing: "Em andamento",
+    done: "Concluida",
+    cancelled: "Cancelada"
+  };
+  return labels[status] || status;
+}
+
+function checklistLabel(key: keyof VehicleIntelligence["checklist"]) {
+  const labels: Record<keyof VehicleIntelligence["checklist"], string> = {
+    has_main_photo: "Foto principal",
+    has_minimum_photos: "6+ fotos",
+    has_version: "Versao",
+    has_mileage: "KM",
+    has_color: "Cor",
+    has_transmission: "Cambio",
+    has_fuel: "Combustivel",
+    has_fipe_reference: "FIPE",
+    has_healthy_margin: "Margem saudavel",
+    is_not_aging: "Giro em dia"
+  };
+  return labels[key];
+}
+
+function indexStockInsights(items: StockVehicle[]) {
+  return items.reduce<Record<number, StockVehicle["intelligence"]>>((acc, item) => {
+    acc[item.id] = item.intelligence;
+    return acc;
+  }, {});
+}
+
 export default function VeiculosPage() {
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [query, setQuery] = useState("");
@@ -180,10 +232,26 @@ export default function VeiculosPage() {
   const [manualCatalogMode, setManualCatalogMode] = useState(false);
   const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<Array<{ name: string; size: number; url: string }>>([]);
+  const [stockInsights, setStockInsights] = useState<Record<number, StockVehicle["intelligence"]>>({});
+  const [vehicleDetail, setVehicleDetail] = useState<VehicleIntelligenceDetail | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [preparationTaskForm, setPreparationTaskForm] = useState<PreparationTaskForm>(initialPreparationTaskForm);
+  const [taskDrafts, setTaskDrafts] = useState<Record<number, PreparationTaskForm>>({});
+  const [savingTaskId, setSavingTaskId] = useState<number | "new" | null>(null);
 
   useEffect(() => {
-    listVeiculos()
-      .then(setVeiculos)
+    Promise.allSettled([listVeiculos(), listStockIntelligence()])
+      .then(([vehiclesResult, stockResult]) => {
+        if (vehiclesResult.status === "fulfilled") {
+          setVeiculos(vehiclesResult.value);
+        } else {
+          throw vehiclesResult.reason;
+        }
+
+        if (stockResult.status === "fulfilled") {
+          setStockInsights(indexStockInsights(stockResult.value));
+        }
+      })
       .catch((err) => setError(err instanceof Error ? err.message : "Erro ao carregar veiculos."))
       .finally(() => setLoading(false));
   }, []);
@@ -237,6 +305,9 @@ export default function VeiculosPage() {
   const yearOptions = useMemo(() => getYearOptions(), []);
   const useFipeCatalog = fipeBrands.length > 0 && !manualCatalogMode;
   const currentImageUrls = imageUrlsFromText(form.image_urls);
+  const activeIntelligence =
+    vehicleDetail?.intelligence ||
+    (editingVehicleId ? stockInsights[editingVehicleId] : null);
 
   const filtered = useMemo(() => {
     const term = query.toLowerCase();
@@ -371,6 +442,10 @@ export default function VeiculosPage() {
     setForm(initialForm);
     setFormError(null);
     resetSelectedImages();
+    setVehicleDetail(null);
+    setPreparationTaskForm(initialPreparationTaskForm);
+    setTaskDrafts({});
+    setTaskDrafts({});
     setManualCatalogMode(false);
     setIsModalOpen(true);
   }
@@ -382,6 +457,7 @@ export default function VeiculosPage() {
     resetSelectedImages();
     setManualCatalogMode(!veiculo.fipe_brand_code);
     setIsModalOpen(true);
+    loadVehicleDetail(veiculo.id);
   }
 
   function resetVehicleModal() {
@@ -389,8 +465,50 @@ export default function VeiculosPage() {
     setEditingVehicleId(null);
     setForm(initialForm);
     setFormError(null);
+    setVehicleDetail(null);
+    setPreparationTaskForm(initialPreparationTaskForm);
     resetSelectedImages();
     setManualCatalogMode(false);
+  }
+
+  async function refreshStockInsights() {
+    const stock = await listStockIntelligence();
+    setStockInsights(indexStockInsights(stock));
+  }
+
+  async function loadVehicleDetail(vehicleId: number) {
+    setIsDetailLoading(true);
+    try {
+      const detail = await getVehicleIntelligence(vehicleId);
+      setVehicleDetail(detail);
+      setTaskDrafts(
+        detail.preparation_tasks.reduce<Record<number, PreparationTaskForm>>((acc, task) => {
+          acc[task.id] = {
+            title: task.title || "",
+            status: task.status || "pending",
+            estimated_cost: task.estimated_cost == null ? "" : String(task.estimated_cost),
+            actual_cost: task.actual_cost == null ? "" : String(task.actual_cost),
+            supplier: task.supplier || ""
+          };
+          return acc;
+        }, {})
+      );
+      setStockInsights((current) => ({
+        ...current,
+        [vehicleId]: detail.intelligence
+      }));
+      setForm((current) => ({
+        ...current,
+        preparation_cost_estimate: detail.vehicle.preparation_cost_estimate == null ? current.preparation_cost_estimate : String(detail.vehicle.preparation_cost_estimate),
+        preparation_cost_actual: detail.vehicle.preparation_cost_actual == null ? current.preparation_cost_actual : String(detail.vehicle.preparation_cost_actual),
+        preparation_status: detail.vehicle.preparation_status || current.preparation_status,
+        ad_quality_score: String(detail.intelligence.ad_quality_score || current.ad_quality_score)
+      }));
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Nao foi possivel carregar a inteligencia do veiculo.");
+    } finally {
+      setIsDetailLoading(false);
+    }
   }
 
   function closeModal() {
@@ -432,6 +550,58 @@ export default function VeiculosPage() {
     for (const file of selectedImageFiles) {
       await uploadVehicleImage(vehicleId, file);
     }
+  }
+
+  async function savePreparationTask(payload: {
+    id?: number;
+    title?: string;
+    status?: VehiclePreparationTask["status"];
+    estimated_cost?: string | number | null;
+    actual_cost?: string | number | null;
+    supplier?: string | null;
+  }) {
+    if (!editingVehicleId) {
+      setFormError("Salve o veiculo antes de adicionar etapas de preparacao.");
+      return;
+    }
+
+    const title = payload.title?.trim();
+    if (!payload.id && !title) {
+      setFormError("Informe o nome da etapa de preparacao.");
+      return;
+    }
+
+    setSavingTaskId(payload.id || "new");
+    setFormError(null);
+    try {
+      await upsertVehiclePreparationTask(editingVehicleId, {
+        id: payload.id,
+        title,
+        status: payload.status,
+        estimated_cost: typeof payload.estimated_cost === "string" ? toNumberOrNull(payload.estimated_cost) : payload.estimated_cost ?? null,
+        actual_cost: typeof payload.actual_cost === "string" ? toNumberOrNull(payload.actual_cost) : payload.actual_cost ?? null,
+        supplier: payload.supplier?.trim() || null
+      });
+      setPreparationTaskForm(initialPreparationTaskForm);
+      await loadVehicleDetail(editingVehicleId);
+      const refreshed = await listVeiculos();
+      setVeiculos(refreshed);
+      await refreshStockInsights();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Nao foi possivel salvar a etapa de preparacao.");
+    } finally {
+      setSavingTaskId(null);
+    }
+  }
+
+  function updateTaskDraft(taskId: number, field: keyof PreparationTaskForm, value: string) {
+    setTaskDrafts((current) => ({
+      ...current,
+      [taskId]: {
+        ...(current[taskId] || initialPreparationTaskForm),
+        [field]: value
+      }
+    }));
   }
 
   function buildPayload(): CreateVeiculoPayload {
@@ -491,6 +661,7 @@ export default function VeiculosPage() {
       }
       const refreshed = await listVeiculos();
       setVeiculos(refreshed);
+      await refreshStockInsights();
       resetVehicleModal();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Nao foi possivel salvar o veiculo.");
@@ -538,7 +709,9 @@ export default function VeiculosPage() {
                     <Th>Preco</Th>
                     <Th>Custo total</Th>
                     <Th>Margem</Th>
+                    <Th>Score</Th>
                     <Th>Fotos</Th>
+                    <Th>Acao sugerida</Th>
                     <Th>Status</Th>
                     <Th>Acoes</Th>
                   </tr>
@@ -546,6 +719,9 @@ export default function VeiculosPage() {
                 <tbody>
                   {filtered.map((veiculo) => {
                     const margin = getExpectedMargin(veiculo);
+                    const insight = stockInsights[veiculo.id];
+                    const score = insight?.ad_quality_score ?? veiculo.ad_quality_score ?? 0;
+                    const topSuggestion = insight?.suggestions?.[0];
                     return (
                       <tr key={veiculo.id}>
                         <Td>
@@ -558,7 +734,13 @@ export default function VeiculosPage() {
                         <Td>{formatCurrency(veiculo.price)}</Td>
                         <Td>{formatCurrency(getTotalCost(veiculo))}</Td>
                         <Td><span className={margin >= 0 ? "text-emerald-700" : "text-red-700"}>{formatCurrency(margin)}</span></Td>
+                        <Td><Badge tone={scoreTone(score)}>{score}/100</Badge></Td>
                         <Td>{veiculo.images?.length || 0}</Td>
+                        <Td>
+                          <span className="line-clamp-2 text-xs text-slate-600">
+                            {topSuggestion?.action || "Sem alerta critico"}
+                          </span>
+                        </Td>
                         <Td><Badge tone={statusTone(veiculo.status)}>{veiculo.status || "available"}</Badge></Td>
                         <Td>
                           <PermissionGate permission="veiculos:update">
@@ -648,6 +830,141 @@ export default function VeiculosPage() {
               <Input label="Preparacao estimada" inputMode="decimal" value={form.preparation_cost_estimate} onChange={(event) => updateField("preparation_cost_estimate", event.target.value)} />
               <Input label="Preparacao realizada" inputMode="decimal" value={form.preparation_cost_actual} onChange={(event) => updateField("preparation_cost_actual", event.target.value)} />
             </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-950">Painel inteligente do veiculo</h3>
+                <p className="mt-1 text-xs text-slate-500">Preparacao, qualidade do anuncio, margem, FIPE e acao recomendada.</p>
+              </div>
+              {activeIntelligence ? (
+                <Badge tone={scoreTone(activeIntelligence.ad_quality_score)}>
+                  Score {activeIntelligence.ad_quality_score}/100
+                </Badge>
+              ) : (
+                <Badge variant="neutral">{isDetailLoading ? "Carregando..." : "Salve para calcular"}</Badge>
+              )}
+            </div>
+
+            {activeIntelligence ? (
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-md bg-white p-3">
+                    <p className="text-xs text-slate-500">Custo total</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-950">{formatCurrency(activeIntelligence.total_cost)}</p>
+                  </div>
+                  <div className="rounded-md bg-white p-3">
+                    <p className="text-xs text-slate-500">Margem prevista</p>
+                    <p className={numberValue(activeIntelligence.margin) >= 0 ? "mt-1 text-sm font-semibold text-emerald-700" : "mt-1 text-sm font-semibold text-red-700"}>
+                      {formatCurrency(activeIntelligence.margin)}
+                    </p>
+                  </div>
+                  <div className="rounded-md bg-white p-3">
+                    <p className="text-xs text-slate-500">Dif. FIPE</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-950">
+                      {activeIntelligence.fipe_difference_percent == null ? "-" : `${activeIntelligence.fipe_difference_percent}%`}
+                    </p>
+                  </div>
+                  <div className="rounded-md bg-white p-3">
+                    <p className="text-xs text-slate-500">Dias em estoque</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-950">{activeIntelligence.days_in_stock}</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                  {(Object.keys(activeIntelligence.checklist) as Array<keyof VehicleIntelligence["checklist"]>).map((key) => (
+                    <div key={key} className="flex items-center gap-2 rounded-md bg-white px-3 py-2 text-xs text-slate-700">
+                      {activeIntelligence.checklist[key] ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      )}
+                      {checklistLabel(key)}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-md bg-white p-3">
+                  <p className="text-xs font-medium text-slate-500">Acao recomendada</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-950">
+                    {activeIntelligence.suggestions[0]?.action || "Nenhuma acao critica agora."}
+                  </p>
+                  {activeIntelligence.suggestions[0]?.reason ? (
+                    <p className="mt-1 text-xs text-slate-500">{activeIntelligence.suggestions[0].reason}</p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {editingVehicleId ? (
+              <div className="mt-5 border-t border-slate-200 pt-4">
+                <div className="mb-3 flex flex-col gap-1">
+                  <h4 className="text-sm font-semibold text-slate-950">Etapas de preparacao e manutencao</h4>
+                  <p className="text-xs text-slate-500">Cada etapa soma custo estimado/realizado ao veiculo e atualiza margem automaticamente.</p>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-5">
+                  <Input label="Etapa" value={preparationTaskForm.title} onChange={(event) => setPreparationTaskForm((current) => ({ ...current, title: event.target.value }))} placeholder="Pneus, funilaria..." />
+                  <label className="block text-sm font-medium text-slate-700">
+                    <span className="mb-2 block">Status</span>
+                    <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={preparationTaskForm.status} onChange={(event) => setPreparationTaskForm((current) => ({ ...current, status: event.target.value as VehiclePreparationTask["status"] }))}>
+                      <option value="pending">Pendente</option>
+                      <option value="doing">Em andamento</option>
+                      <option value="done">Concluida</option>
+                      <option value="cancelled">Cancelada</option>
+                    </select>
+                  </label>
+                  <Input label="Estimado" inputMode="decimal" value={preparationTaskForm.estimated_cost} onChange={(event) => setPreparationTaskForm((current) => ({ ...current, estimated_cost: event.target.value }))} />
+                  <Input label="Realizado" inputMode="decimal" value={preparationTaskForm.actual_cost} onChange={(event) => setPreparationTaskForm((current) => ({ ...current, actual_cost: event.target.value }))} />
+                  <div className="flex items-end">
+                    <Button type="button" className="w-full" disabled={savingTaskId === "new"} onClick={() => savePreparationTask(preparationTaskForm)}>
+                      {savingTaskId === "new" ? "Salvando..." : "Adicionar etapa"}
+                    </Button>
+                  </div>
+                </div>
+
+                {vehicleDetail?.preparation_tasks.length ? (
+                  <div className="mt-4 space-y-3">
+                    {vehicleDetail.preparation_tasks.map((task) => {
+                      const draft = taskDrafts[task.id] || {
+                        title: task.title,
+                        status: task.status,
+                        estimated_cost: task.estimated_cost == null ? "" : String(task.estimated_cost),
+                        actual_cost: task.actual_cost == null ? "" : String(task.actual_cost),
+                        supplier: task.supplier || ""
+                      };
+                      return (
+                        <div key={task.id} className="grid gap-3 rounded-md border border-slate-200 bg-white p-3 md:grid-cols-6">
+                          <Input label="Etapa" value={draft.title} onChange={(event) => updateTaskDraft(task.id, "title", event.target.value)} />
+                          <label className="block text-sm font-medium text-slate-700">
+                            <span className="mb-2 block">Status</span>
+                            <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={draft.status} onChange={(event) => updateTaskDraft(task.id, "status", event.target.value)}>
+                              <option value="pending">Pendente</option>
+                              <option value="doing">Em andamento</option>
+                              <option value="done">Concluida</option>
+                              <option value="cancelled">Cancelada</option>
+                            </select>
+                          </label>
+                          <Input label="Estimado" inputMode="decimal" value={draft.estimated_cost} onChange={(event) => updateTaskDraft(task.id, "estimated_cost", event.target.value)} />
+                          <Input label="Realizado" inputMode="decimal" value={draft.actual_cost} onChange={(event) => updateTaskDraft(task.id, "actual_cost", event.target.value)} />
+                          <Input label="Fornecedor" value={draft.supplier} onChange={(event) => updateTaskDraft(task.id, "supplier", event.target.value)} />
+                          <div className="flex items-end">
+                            <Button type="button" variant="secondary" className="w-full" disabled={savingTaskId === task.id} onClick={() => savePreparationTask({ id: task.id, ...draft })}>
+                              {savingTaskId === task.id ? "Salvando..." : taskStatusLabel(draft.status)}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-xs text-slate-500">Nenhuma etapa de preparacao cadastrada para este veiculo.</p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-4 text-xs text-slate-500">Salve o veiculo uma vez para liberar o painel de etapas de preparacao.</p>
+            )}
           </section>
 
           <section className="grid gap-4 md:grid-cols-2">

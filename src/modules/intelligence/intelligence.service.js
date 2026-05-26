@@ -2,6 +2,7 @@ const pool = require("../../config/db");
 const repository = require("./intelligence.repository");
 const { explainActions } = require("./explanation.service");
 const afterSalesService = require("../after_sales/afterSales.service");
+const { calculateVehicleSignals } = require("../stock_intelligence/stockIntelligence.service");
 
 function priorityLabel(score) {
   if (score >= 85) return "critical";
@@ -259,25 +260,37 @@ async function leadActions(dealershipId) {
 async function stockActions(dealershipId) {
   const { rows } = await pool.query(
     `SELECT
-        id,
-        title,
-        brand,
-        model,
-        price,
-        fipe_price,
-        purchase_price,
-        acquisition_cost,
-        preparation_cost_actual,
-        preparation_cost_estimate,
-        preparation_status,
-        ad_quality_score,
-        ad_status,
-        COALESCE(entry_date, created_at) AS entry_date,
-        FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(entry_date, created_at))) / 86400)::int AS days_in_stock
+        vehicles.id,
+        vehicles.title,
+        vehicles.brand,
+        vehicles.model,
+        vehicles.price,
+        vehicles.fipe_price,
+        vehicles.version,
+        vehicles.mileage,
+        vehicles.color,
+        vehicles.fuel,
+        vehicles.transmission,
+        vehicles.purchase_price,
+        vehicles.acquisition_cost,
+        vehicles.preparation_cost_actual,
+        vehicles.preparation_cost_estimate,
+        vehicles.preparation_status,
+        vehicles.ad_quality_score,
+        vehicles.ad_status,
+        COUNT(DISTINCT vi.id)::int AS image_count,
+        BOOL_OR(COALESCE(vi.is_main, false) OR COALESCE(vi.is_cover, false)) AS has_main_image,
+        COUNT(DISTINCT vpt.id) FILTER (WHERE vpt.status <> 'done')::int AS pending_preparation_tasks,
+        COUNT(DISTINCT vpt.id) FILTER (WHERE vpt.status = 'done')::int AS completed_preparation_tasks,
+        COALESCE(vehicles.entry_date, vehicles.created_at) AS entry_date,
+        FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(vehicles.entry_date, vehicles.created_at))) / 86400)::int AS days_in_stock
      FROM vehicles
-     WHERE dealership_id = $1
-       AND status = 'available'
-     ORDER BY COALESCE(entry_date, created_at) ASC
+     LEFT JOIN vehicle_images vi ON vi.vehicle_id = vehicles.id
+     LEFT JOIN vehicle_preparation_tasks vpt ON vpt.vehicle_id = vehicles.id
+     WHERE vehicles.dealership_id = $1
+       AND vehicles.status = 'available'
+     GROUP BY vehicles.id
+     ORDER BY COALESCE(vehicles.entry_date, vehicles.created_at) ASC
      LIMIT 50`,
     [dealershipId]
   );
@@ -288,6 +301,7 @@ async function stockActions(dealershipId) {
     const price = Number(vehicle.price || 0);
     const fipe = Number(vehicle.fipe_price || 0);
     const purchase = Number(vehicle.purchase_price || 0);
+    const signals = calculateVehicleSignals(vehicle);
     const totalCost =
       purchase +
       Number(vehicle.acquisition_cost || 0) +
@@ -297,7 +311,60 @@ async function stockActions(dealershipId) {
       );
     const fipeDiff = fipe > 0 ? ((price - fipe) / fipe) * 100 : null;
     const projectedMargin = price > 0 && totalCost > 0 ? price - totalCost : null;
-    const adQuality = Number(vehicle.ad_quality_score || 0);
+    const adQuality = Number(signals.ad_quality_score || vehicle.ad_quality_score || 0);
+
+    if (!signals.checklist.has_minimum_photos) {
+      actions.push(
+        action({
+          key: `vehicle:${vehicle.id}:photo-quality`,
+          type: "ad_quality",
+          entityType: "vehicle",
+          entityId: vehicle.id,
+          score: vehicle.image_count === 0 ? 84 : 70,
+          reason: vehicle.image_count === 0
+            ? "Anuncio sem foto principal"
+            : `Anuncio com apenas ${vehicle.image_count} fotos`,
+          suggestedAction: vehicle.image_count === 0
+            ? "Adicionar foto principal do veiculo"
+            : "Adicionar mais fotos ao anuncio",
+          impactEstimate: price > 0 ? price * 0.02 : null,
+          evidence: {
+            vehicle_id: vehicle.id,
+            title: vehicle.title,
+            image_count: Number(vehicle.image_count || 0),
+            has_main_image: signals.has_main_image,
+            ad_quality_score: adQuality
+          }
+        })
+      );
+    }
+
+    if (
+      !signals.checklist.has_version ||
+      !signals.checklist.has_mileage ||
+      !signals.checklist.has_color ||
+      !signals.checklist.has_transmission ||
+      !signals.checklist.has_fuel
+    ) {
+      actions.push(
+        action({
+          key: `vehicle:${vehicle.id}:missing-ad-data`,
+          type: "ad_quality",
+          entityType: "vehicle",
+          entityId: vehicle.id,
+          score: 64,
+          reason: "Cadastro incompleto reduz conversao do anuncio",
+          suggestedAction: "Completar versao, KM, cor, cambio e combustivel",
+          impactEstimate: price > 0 ? price * 0.015 : null,
+          evidence: {
+            vehicle_id: vehicle.id,
+            title: vehicle.title,
+            checklist: signals.checklist,
+            ad_quality_score: adQuality
+          }
+        })
+      );
+    }
 
     if (days >= 60) {
       actions.push(
@@ -365,7 +432,7 @@ async function stockActions(dealershipId) {
       );
     }
 
-    if (adQuality > 0 && adQuality < 60) {
+    if (adQuality < 70) {
       actions.push(
         action({
           key: `vehicle:${vehicle.id}:bad-ad-quality`,
@@ -386,14 +453,14 @@ async function stockActions(dealershipId) {
       );
     }
 
-    if (vehicle.preparation_status && vehicle.preparation_status !== "done" && days >= 7) {
+    if ((vehicle.preparation_status && vehicle.preparation_status !== "done") || Number(vehicle.pending_preparation_tasks || 0) > 0) {
       actions.push(
         action({
           key: `vehicle:${vehicle.id}:preparation-delay`,
           type: "stock_preparation",
           entityType: "vehicle",
           entityId: vehicle.id,
-          score: 66,
+          score: days >= 7 ? 68 : 56,
           reason: "Preparacao do veiculo ainda pendente",
           suggestedAction: "Concluir preparacao para liberar fotos finais e venda ativa",
           impactEstimate: price > 0 ? price * 0.03 : null,

@@ -1,3 +1,13 @@
+export type VehicleImage = {
+  id: number;
+  image_url: string;
+  is_main?: boolean | null;
+  is_cover?: boolean | null;
+  sort_order?: number | null;
+  label?: string | null;
+  notes?: string | null;
+};
+
 export type Veiculo = {
   id: number;
   title: string;
@@ -30,15 +40,7 @@ export type Veiculo = {
     actual_cost?: number;
     status?: string;
   }> | null;
-  images?: Array<{
-    id: number;
-    image_url: string;
-    is_main?: boolean | null;
-    is_cover?: boolean | null;
-    sort_order?: number | null;
-    label?: string | null;
-    notes?: string | null;
-  }>;
+  images?: VehicleImage[];
   ad_quality_score?: number | null;
   is_featured?: boolean | null;
   status?: string | null;

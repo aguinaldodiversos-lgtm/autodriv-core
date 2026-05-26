@@ -6,11 +6,29 @@ const pool = require("../../config/db");
 async function insertForVehicleInDealership(vehicleId, imageUrl, isMain, dealershipId) {
   const result = await pool.query(
     `INSERT INTO vehicle_images
-       (vehicle_id, image_url, is_main)
-     SELECT v.id, $2::text, $3::boolean
+       (dealership_id, vehicle_id, image_url, is_main, sort_order)
+     SELECT $4::int,
+            v.id,
+            $2::text,
+            ($3::boolean OR NOT EXISTS (
+              SELECT 1
+              FROM vehicle_images existing_main
+              WHERE existing_main.vehicle_id = v.id
+            )),
+            COALESCE(
+              (
+                SELECT MAX(existing.sort_order) + 1
+                FROM vehicle_images existing
+                WHERE existing.vehicle_id = v.id
+              ),
+              0
+            )
      FROM vehicles v
      WHERE v.id = $1::int
        AND v.dealership_id = $4::int
+     ON CONFLICT (vehicle_id, image_url)
+     DO UPDATE SET
+       dealership_id = EXCLUDED.dealership_id
      RETURNING *`,
     [vehicleId, imageUrl, isMain, dealershipId]
   );

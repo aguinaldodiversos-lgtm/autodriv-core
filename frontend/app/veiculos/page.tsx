@@ -1,9 +1,12 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Camera, Pencil, Plus, Wrench } from "lucide-react";
+import { Camera, ImagePlus, Pencil, Plus, Trash2, Wrench } from "lucide-react";
 import { createVeiculo, listVeiculos, updateVeiculo } from "@/lib/api/veiculos";
+import { uploadVehicleImage } from "@/lib/api/images";
 import { AppShell } from "@/components/layout/AppShell";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Badge } from "@/components/ui/Badge";
@@ -174,6 +177,9 @@ export default function VeiculosPage() {
   const [fipeYears, setFipeYears] = useState<FipeYear[]>([]);
   const [fipeStatus, setFipeStatus] = useState<string | null>(null);
   const [isFipeLoading, setIsFipeLoading] = useState(false);
+  const [manualCatalogMode, setManualCatalogMode] = useState(false);
+  const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<Array<{ name: string; size: number; url: string }>>([]);
 
   useEffect(() => {
     listVeiculos()
@@ -198,12 +204,39 @@ export default function VeiculosPage() {
       .finally(() => setIsFipeLoading(false));
   }, [fipeBrands.length, isModalOpen]);
 
+  useEffect(() => {
+    if (!isModalOpen || !editingVehicleId || manualCatalogMode || !form.fipe_brand_code) return;
+
+    let cancelled = false;
+    async function loadSavedFipeOptions() {
+      try {
+        const response = await listFipeModels(form.fipe_brand_code);
+        if (cancelled) return;
+        setFipeModels(response.models);
+
+        if (form.fipe_model_code) {
+          const years = await listFipeYears(form.fipe_brand_code, form.fipe_model_code);
+          if (!cancelled) setFipeYears(years);
+        }
+      } catch {
+        if (!cancelled) setManualCatalogMode(true);
+      }
+    }
+
+    loadSavedFipeOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, [editingVehicleId, form.fipe_brand_code, form.fipe_model_code, isModalOpen, manualCatalogMode]);
+
   const brandOptions = useMemo(() => getCatalogBrands(veiculos.map((veiculo) => veiculo.brand)), [veiculos]);
   const modelOptions = useMemo(
     () => getCatalogModels(form.brand, veiculos.filter((veiculo) => veiculo.brand === form.brand).map((veiculo) => veiculo.model)),
     [form.brand, veiculos]
   );
   const yearOptions = useMemo(() => getYearOptions(), []);
+  const useFipeCatalog = fipeBrands.length > 0 && !manualCatalogMode;
+  const currentImageUrls = imageUrlsFromText(form.image_urls);
 
   const filtered = useMemo(() => {
     const term = query.toLowerCase();
@@ -337,6 +370,8 @@ export default function VeiculosPage() {
     setEditingVehicleId(null);
     setForm(initialForm);
     setFormError(null);
+    resetSelectedImages();
+    setManualCatalogMode(false);
     setIsModalOpen(true);
   }
 
@@ -344,15 +379,59 @@ export default function VeiculosPage() {
     setEditingVehicleId(veiculo.id);
     setForm(formFromVehicle(veiculo));
     setFormError(null);
+    resetSelectedImages();
+    setManualCatalogMode(!veiculo.fipe_brand_code);
     setIsModalOpen(true);
   }
 
-  function closeModal() {
-    if (isSaving) return;
+  function resetVehicleModal() {
     setIsModalOpen(false);
     setEditingVehicleId(null);
     setForm(initialForm);
     setFormError(null);
+    resetSelectedImages();
+    setManualCatalogMode(false);
+  }
+
+  function closeModal() {
+    if (isSaving) return;
+    resetVehicleModal();
+  }
+
+  function resetSelectedImages() {
+    setSelectedImageFiles([]);
+    setImagePreviews((current) => {
+      current.forEach((preview) => URL.revokeObjectURL(preview.url));
+      return [];
+    });
+  }
+
+  function handleImageSelection(files: FileList | null) {
+    const images = Array.from(files || []).filter((file) => file.type.startsWith("image/"));
+    setSelectedImageFiles(images);
+    setImagePreviews((current) => {
+      current.forEach((preview) => URL.revokeObjectURL(preview.url));
+      return images.map((file) => ({
+        name: file.name,
+        size: file.size,
+        url: URL.createObjectURL(file)
+      }));
+    });
+  }
+
+  function removeSelectedImage(index: number) {
+    setSelectedImageFiles((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setImagePreviews((current) => {
+      const removed = current[index];
+      if (removed) URL.revokeObjectURL(removed.url);
+      return current.filter((_, itemIndex) => itemIndex !== index);
+    });
+  }
+
+  async function uploadSelectedImages(vehicleId: number) {
+    for (const file of selectedImageFiles) {
+      await uploadVehicleImage(vehicleId, file);
+    }
   }
 
   function buildPayload(): CreateVeiculoPayload {
@@ -401,14 +480,18 @@ export default function VeiculosPage() {
 
     setIsSaving(true);
     try {
+      let saved: Veiculo;
       if (editingVehicleId) {
-        const updated = await updateVeiculo(editingVehicleId, buildPayload());
-        setVeiculos((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        saved = await updateVeiculo(editingVehicleId, buildPayload());
       } else {
-        const created = await createVeiculo(buildPayload());
-        setVeiculos((current) => [created, ...current]);
+        saved = await createVeiculo(buildPayload());
       }
-      closeModal();
+      if (selectedImageFiles.length > 0) {
+        await uploadSelectedImages(saved.id);
+      }
+      const refreshed = await listVeiculos();
+      setVeiculos(refreshed);
+      resetVehicleModal();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Nao foi possivel salvar o veiculo.");
     } finally {
@@ -497,33 +580,47 @@ export default function VeiculosPage() {
       <Modal open={isModalOpen} title={editingVehicleId ? "Editar veiculo" : "Cadastrar veiculo"} onClose={closeModal}>
         <form className="space-y-6" onSubmit={onSubmitVehicle}>
           <section>
-            <h3 className="mb-3 text-sm font-semibold text-slate-950">Identificacao e catalogo</h3>
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="text-sm font-semibold text-slate-950">Identificacao e catalogo</h3>
+              {fipeBrands.length > 0 ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setManualCatalogMode((current) => !current)}>
+                  {manualCatalogMode ? "Usar FIPE" : "Preencher manualmente"}
+                </Button>
+              ) : null}
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <label className="block text-sm font-medium text-slate-700">
-                <span className="mb-2 block">Marca FIPE</span>
-                <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.fipe_brand_code} onChange={(event) => selectFipeBrand(event.target.value)}>
-                  <option value="">Selecionar marca</option>
-                  {fipeBrands.map((brand) => <option key={brand.code} value={brand.code}>{brand.name}</option>)}
-                </select>
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                <span className="mb-2 block">Modelo FIPE</span>
-                <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.fipe_model_code} onChange={(event) => selectFipeModel(event.target.value)} disabled={!form.fipe_brand_code || isFipeLoading}>
-                  <option value="">Selecionar modelo</option>
-                  {fipeModels.map((model) => <option key={model.code} value={model.code}>{model.name}</option>)}
-                </select>
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                <span className="mb-2 block">Ano/combustivel FIPE</span>
-                <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.fipe_year_code} onChange={(event) => selectFipeYear(event.target.value)} disabled={!form.fipe_model_code || isFipeLoading}>
-                  <option value="">Selecionar ano</option>
-                  {fipeYears.map((year) => <option key={year.code} value={year.code}>{year.name}</option>)}
-                </select>
-              </label>
-              <Input label="FIPE" inputMode="decimal" value={form.fipe_price} onChange={(event) => updateField("fipe_price", event.target.value)} placeholder="Carregada pela FIPE ou manual" />
-              <Input label="Marca cadastrada" list="vehicle-brand-options" value={form.brand} onChange={(event) => updateField("brand", event.target.value)} required />
-              <Input label="Modelo cadastrado" list="vehicle-model-options" value={form.model} onChange={(event) => updateField("model", event.target.value)} required />
-              <Input label="Ano/modelo" list="vehicle-year-options" value={form.year} onChange={(event) => updateField("year", event.target.value)} required />
+              {useFipeCatalog ? (
+                <>
+                  <label className="block text-sm font-medium text-slate-700">
+                    <span className="mb-2 block">Marca</span>
+                    <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.fipe_brand_code} onChange={(event) => selectFipeBrand(event.target.value)}>
+                      <option value="">Selecionar marca</option>
+                      {fipeBrands.map((brand) => <option key={brand.code} value={brand.code}>{brand.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="block text-sm font-medium text-slate-700">
+                    <span className="mb-2 block">Modelo</span>
+                    <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.fipe_model_code} onChange={(event) => selectFipeModel(event.target.value)} disabled={!form.fipe_brand_code || isFipeLoading}>
+                      <option value="">Selecionar modelo</option>
+                      {fipeModels.map((model) => <option key={model.code} value={model.code}>{model.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="block text-sm font-medium text-slate-700">
+                    <span className="mb-2 block">Ano/modelo</span>
+                    <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.fipe_year_code} onChange={(event) => selectFipeYear(event.target.value)} disabled={!form.fipe_model_code || isFipeLoading}>
+                      <option value="">Selecionar ano</option>
+                      {fipeYears.map((year) => <option key={year.code} value={year.code}>{year.name}</option>)}
+                    </select>
+                  </label>
+                </>
+              ) : (
+                <>
+                  <Input label="Marca" list="vehicle-brand-options" value={form.brand} onChange={(event) => updateField("brand", event.target.value)} required />
+                  <Input label="Modelo" list="vehicle-model-options" value={form.model} onChange={(event) => updateField("model", event.target.value)} required />
+                  <Input label="Ano/modelo" list="vehicle-year-options" value={form.year} onChange={(event) => updateField("year", event.target.value)} required />
+                </>
+              )}
+              <Input label="Valor FIPE" inputMode="decimal" value={form.fipe_price} onChange={(event) => updateField("fipe_price", event.target.value)} placeholder="Carregado pela FIPE ou manual" />
               <Input label="Versao" value={form.version} onChange={(event) => updateField("version", event.target.value)} placeholder="EXL 2.0, LTZ, Comfortline..." />
               <Input label="Placa" value={form.license_plate} onChange={(event) => updateField("license_plate", event.target.value.toUpperCase())} />
               <Input label="Quilometragem" inputMode="numeric" value={form.mileage} onChange={(event) => updateField("mileage", event.target.value)} />
@@ -563,8 +660,48 @@ export default function VeiculosPage() {
               <textarea className="min-h-28 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.preparation_items} onChange={(event) => updateField("preparation_items", event.target.value)} placeholder="Pneus | estimado 1800 | realizado 1650&#10;Funilaria | estimado 900" />
             </label>
             <label className="block text-sm font-medium text-slate-700 md:col-span-2">
-              <span className="mb-2 flex items-center gap-2"><Camera className="h-4 w-4" /> Fotos por URL</span>
-              <textarea className="min-h-24 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.image_urls} onChange={(event) => updateField("image_urls", event.target.value)} placeholder="Cole uma URL por linha. O upload direto fica como proxima evolucao." />
+              <span className="mb-2 flex items-center gap-2"><Camera className="h-4 w-4" /> Fotos do veiculo</span>
+              <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">Enviar imagens do computador</p>
+                    <p className="mt-1 text-xs text-slate-500">JPEG, PNG ou WebP. As fotos sao enviadas depois que o veiculo e salvo.</p>
+                  </div>
+                  <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+                    <ImagePlus className="h-4 w-4" />
+                    Escolher fotos
+                    <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => handleImageSelection(event.target.files)} />
+                  </label>
+                </div>
+                {imagePreviews.length > 0 ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {imagePreviews.map((preview, index) => (
+                      <div key={`${preview.name}-${preview.url}`} className="overflow-hidden rounded-md border border-slate-200 bg-white">
+                        <img src={preview.url} alt={preview.name} className="h-28 w-full object-cover" />
+                        <div className="flex items-center justify-between gap-2 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium text-slate-800">{preview.name}</p>
+                            <p className="text-xs text-slate-500">{Math.max(1, Math.round(preview.size / 1024))} KB</p>
+                          </div>
+                          <button type="button" className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-red-600" onClick={() => removeSelectedImage(index)} aria-label={`Remover ${preview.name}`}>
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {editingVehicleId && currentImageUrls.length > 0 ? (
+                  <div className="mt-4">
+                    <p className="mb-2 text-xs font-medium text-slate-600">Fotos ja cadastradas</p>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      {currentImageUrls.map((url) => (
+                        <img key={url} src={url} alt="Foto cadastrada do veiculo" className="h-24 w-full rounded-md border border-slate-200 object-cover" />
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </label>
             <label className="block text-sm font-medium text-slate-700 md:col-span-2">
               <span className="mb-2 block">Observacoes internas</span>

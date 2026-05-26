@@ -8,6 +8,7 @@ import { AlertTriangle, Camera, CheckCircle2, ImagePlus, Pencil, Plus, Trash2, W
 import { createVeiculo, listVeiculos, updateVeiculo } from "@/lib/api/veiculos";
 import { uploadVehicleImage } from "@/lib/api/images";
 import { getVehicleIntelligence, listStockIntelligence, upsertVehiclePreparationTask } from "@/lib/api/stock-intelligence";
+import { generateVehicleAd, listVehicleAds } from "@/lib/api/ads";
 import { AppShell } from "@/components/layout/AppShell";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Badge } from "@/components/ui/Badge";
@@ -20,6 +21,7 @@ import { Table, Td, Th } from "@/components/ui/Table";
 import { getFipeValue, listFipeBrands, listFipeModels, listFipeYears } from "@/lib/api/fipe";
 import { formatCurrency } from "@/lib/utils/formatters";
 import { fuelOptions, getCatalogBrands, getCatalogModels, getYearOptions, transmissionOptions } from "@/lib/vehicles/catalog";
+import type { PreparedAd } from "@/types/ad";
 import type { FipeBrand, FipeModel, FipeValue, FipeYear } from "@/types/fipe";
 import type { StockVehicle, VehicleIntelligence, VehicleIntelligenceDetail, VehiclePreparationTask } from "@/types/stock-intelligence";
 import type { CreateVeiculoPayload, Veiculo } from "@/types/veiculo";
@@ -238,6 +240,9 @@ export default function VeiculosPage() {
   const [preparationTaskForm, setPreparationTaskForm] = useState<PreparationTaskForm>(initialPreparationTaskForm);
   const [taskDrafts, setTaskDrafts] = useState<Record<number, PreparationTaskForm>>({});
   const [savingTaskId, setSavingTaskId] = useState<number | "new" | null>(null);
+  const [preparedAds, setPreparedAds] = useState<PreparedAd[]>([]);
+  const [adPlatform, setAdPlatform] = useState("instagram");
+  const [isGeneratingAd, setIsGeneratingAd] = useState(false);
 
   useEffect(() => {
     Promise.allSettled([listVeiculos(), listStockIntelligence()])
@@ -445,7 +450,8 @@ export default function VeiculosPage() {
     setVehicleDetail(null);
     setPreparationTaskForm(initialPreparationTaskForm);
     setTaskDrafts({});
-    setTaskDrafts({});
+    setPreparedAds([]);
+    setAdPlatform("instagram");
     setManualCatalogMode(false);
     setIsModalOpen(true);
   }
@@ -458,6 +464,7 @@ export default function VeiculosPage() {
     setManualCatalogMode(!veiculo.fipe_brand_code);
     setIsModalOpen(true);
     loadVehicleDetail(veiculo.id);
+    loadVehicleAds(veiculo.id);
   }
 
   function resetVehicleModal() {
@@ -467,6 +474,9 @@ export default function VeiculosPage() {
     setFormError(null);
     setVehicleDetail(null);
     setPreparationTaskForm(initialPreparationTaskForm);
+    setTaskDrafts({});
+    setPreparedAds([]);
+    setAdPlatform("instagram");
     resetSelectedImages();
     setManualCatalogMode(false);
   }
@@ -508,6 +518,15 @@ export default function VeiculosPage() {
       setFormError(err instanceof Error ? err.message : "Nao foi possivel carregar a inteligencia do veiculo.");
     } finally {
       setIsDetailLoading(false);
+    }
+  }
+
+  async function loadVehicleAds(vehicleId: number) {
+    try {
+      const ads = await listVehicleAds(vehicleId);
+      setPreparedAds(ads);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Nao foi possivel carregar anuncios preparados.");
     }
   }
 
@@ -602,6 +621,24 @@ export default function VeiculosPage() {
         [field]: value
       }
     }));
+  }
+
+  async function generatePreparedAd() {
+    if (!editingVehicleId) {
+      setFormError("Salve o veiculo antes de preparar anuncios.");
+      return;
+    }
+
+    setIsGeneratingAd(true);
+    setFormError(null);
+    try {
+      const ad = await generateVehicleAd(editingVehicleId, adPlatform);
+      setPreparedAds((current) => [ad, ...current]);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Nao foi possivel preparar o anuncio.");
+    } finally {
+      setIsGeneratingAd(false);
+    }
   }
 
   function buildPayload(): CreateVeiculoPayload {
@@ -1024,6 +1061,68 @@ export default function VeiculosPage() {
               <span className="mb-2 block">Observacoes internas</span>
               <textarea className="min-h-20 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.notes} onChange={(event) => updateField("notes", event.target.value)} placeholder="Historico, documentacao, restricoes ou pontos de atencao." />
             </label>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 p-4">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-950">Preparacao de anuncios</h3>
+                <p className="mt-1 text-xs text-slate-500">Gere titulo, descricao, legenda, checklist e campos para Instagram ou portais.</p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <select className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={adPlatform} onChange={(event) => setAdPlatform(event.target.value)}>
+                  <option value="instagram">Instagram feed</option>
+                  <option value="instagram_story">Instagram stories</option>
+                  <option value="portal">Portal de anuncios</option>
+                  <option value="carros_na_cidade">Carros na Cidade</option>
+                </select>
+                <Button type="button" disabled={!editingVehicleId || isGeneratingAd} onClick={generatePreparedAd}>
+                  {isGeneratingAd ? "Preparando..." : "Preparar anuncio"}
+                </Button>
+              </div>
+            </div>
+
+            {!editingVehicleId ? (
+              <p className="text-xs text-slate-500">Salve o veiculo uma vez para preparar anuncios.</p>
+            ) : preparedAds.length === 0 ? (
+              <p className="text-xs text-slate-500">Nenhum anuncio preparado ainda.</p>
+            ) : (
+              <div className="space-y-3">
+                {preparedAds.slice(0, 3).map((ad) => (
+                  <div key={ad.id} className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-950">{ad.title || "Anuncio sem titulo"}</p>
+                        <p className="text-xs text-slate-500">{ad.metadata?.platform_name || ad.platform || "Canal"} · {ad.status || "draft"}</p>
+                      </div>
+                      <Badge variant={ad.status === "ready" ? "success" : "warning"}>
+                        {ad.status === "ready" ? "Pronto" : "Rascunho"}
+                      </Badge>
+                    </div>
+                    <p className="mt-3 whitespace-pre-line text-sm text-slate-700">{ad.description}</p>
+                    {ad.metadata?.caption ? (
+                      <div className="mt-3 rounded-md bg-white p-3">
+                        <p className="text-xs font-medium text-slate-500">Legenda sugerida</p>
+                        <p className="mt-1 whitespace-pre-line text-sm text-slate-700">{ad.metadata.caption}</p>
+                        {ad.metadata.hashtags?.length ? (
+                          <p className="mt-2 text-xs text-slate-500">{ad.metadata.hashtags.join(" ")}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {ad.metadata?.checklist?.length ? (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {ad.metadata.checklist.map((item) => (
+                          <div key={item.key} className="flex items-center gap-2 text-xs text-slate-600">
+                            {item.done ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertTriangle className="h-4 w-4 text-amber-600" />}
+                            {item.label}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="grid gap-4 md:grid-cols-2">

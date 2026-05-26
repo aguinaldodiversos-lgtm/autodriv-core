@@ -49,6 +49,7 @@ const migrations = [
   require("./migrations/042_intelligence_priority_impact"),
   require("./migrations/043_vehicle_intake_details"),
   require("./migrations/044_vehicle_fipe_reference_codes"),
+  require("./migrations/045_ads_preparation_metadata"),
 ];
 
 const path = require("path");

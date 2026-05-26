@@ -1,7 +1,7 @@
 const pool = require("../../config/db");
 const conversationRepo = require("../lead_conversations/leadConversations.repository");
 const followupService = require("../followups/followup.service");
-const aiSeller = require("../ai_seller/aiSeller.service");
+const leadAiReception = require("../lead_ai_reception/leadAiReception.service");
 const { getSession } = require("../whatsapp_baileys/session.manager");
 
 function canProcess(dealershipId, phone) {
@@ -113,8 +113,11 @@ async function handleIncomingMessage({ dealershipId, phone, text }) {
       15
     );
 
-    const result = await aiSeller.handleMessage(lead.id, text, history, {
-      dealershipId
+    const result = await leadAiReception.handleLeadMessage({
+      leadId: lead.id,
+      dealershipId,
+      message: text,
+      history
     });
 
     if (!result?.reply) return;
@@ -126,17 +129,31 @@ async function handleIncomingMessage({ dealershipId, phone, text }) {
       sender: "ai",
       channel: "whatsapp",
       direction: "outbound",
-      message: result.reply
+      message: result.reply,
+      metadata: {
+        ai_reception: result.analysis || {},
+        handoff_to_human: Boolean(result.handoffToHuman)
+      }
     });
 
     await pool.query(
       `UPDATE inbox_threads
-       SET status = 'waiting_customer',
+       SET status = $1,
            last_message_at = NOW(),
-           unread_count = 0,
+           unread_count = $2,
+           metadata = metadata || $3::jsonb,
            updated_at = NOW()
-       WHERE id = $1 AND dealership_id = $2`,
-      [thread.id, dealershipId]
+       WHERE id = $4 AND dealership_id = $5`,
+      [
+        result.handoffToHuman ? "waiting_seller" : "waiting_customer",
+        result.handoffToHuman ? 1 : 0,
+        JSON.stringify({
+          ai_reception: result.analysis || {},
+          handoff_to_human: Boolean(result.handoffToHuman)
+        }),
+        thread.id,
+        dealershipId
+      ]
     );
 
     await pool.query(

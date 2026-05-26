@@ -194,6 +194,7 @@ const mountRoutes = [
   ["/api/lead-distribution", require("./modules/lead_distribution/distribution.routes")],
   ["/api/lead-priority", require("./modules/lead_priority/priority.routes")],
   ["/api/intelligence", require("./modules/intelligence/intelligence.routes")],
+  ["/api/lead-ai-reception", require("./modules/lead_ai_reception/leadAiReception.routes")],
   ["/api/forecast", require("./modules/analytics/forecast.routes")],
   ["/api/dashboard-intelligence", require("./modules/dashboard_intelligence/dashboard.routes")],
   ["/api/notifications", require("./modules/notifications/rules/notification.routes")],

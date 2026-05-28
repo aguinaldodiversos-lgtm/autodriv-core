@@ -1413,13 +1413,13 @@ export default function VeiculosPage() {
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <Button type="button" size="sm" variant="secondary" disabled={Boolean(preparationAction)} onClick={() => createAdSuggestion("description")}>
                         <Sparkles className="h-3.5 w-3.5" />
-                        {preparationAction === "description" ? "Gerando..." : "Descricao"}
+                        {preparationAction === "description" ? "Gerando..." : "Gerar descricao"}
                       </Button>
                       <Button type="button" size="sm" variant="secondary" disabled={Boolean(preparationAction)} onClick={() => createAdSuggestion("price")}>
-                        {preparationAction === "price" ? "Calculando..." : "Preco"}
+                        {preparationAction === "price" ? "Calculando..." : "Sugerir preco"}
                       </Button>
                       <Button type="button" size="sm" variant="secondary" disabled={Boolean(preparationAction)} onClick={() => createAdSuggestion("priority")}>
-                        {preparationAction === "priority" ? "Priorizando..." : "Prioridade"}
+                        {preparationAction === "priority" ? "Priorizando..." : "Sugerir prioridade"}
                       </Button>
                     </div>
                   </div>

@@ -32,6 +32,12 @@ export type Veiculo = {
   acquisition_source?: string | null;
   preparation_cost_estimate?: number | string | null;
   preparation_cost_actual?: number | string | null;
+  documentation_cost?: number | string | null;
+  transport_cost?: number | string | null;
+  commission_cost?: number | string | null;
+  other_costs?: number | string | null;
+  price_strategy?: string | null;
+  ad_description?: string | null;
   notes?: string | null;
   repair_notes?: string | null;
   preparation_items?: Array<{
@@ -45,6 +51,8 @@ export type Veiculo = {
   is_featured?: boolean | null;
   status?: string | null;
   documentation_status?: string | null;
+  documentation_notes?: string | null;
+  legal_restriction_status?: string | null;
   ad_status?: string | null;
   preparation_status?: string | null;
   created_at?: string;
@@ -74,6 +82,12 @@ export type CreateVeiculoPayload = {
   preparation_status?: string;
   preparation_cost_estimate?: number | null;
   preparation_cost_actual?: number | null;
+  documentation_cost?: number | null;
+  transport_cost?: number | null;
+  commission_cost?: number | null;
+  other_costs?: number | null;
+  price_strategy?: string | null;
+  ad_description?: string | null;
   notes?: string | null;
   repair_notes?: string | null;
   preparation_items?: Array<{
@@ -83,6 +97,9 @@ export type CreateVeiculoPayload = {
     status?: string;
   }>;
   image_urls?: string[];
+  documentation_status?: string;
+  documentation_notes?: string | null;
+  legal_restriction_status?: string;
   ad_status?: string;
   ad_quality_score?: number;
 };

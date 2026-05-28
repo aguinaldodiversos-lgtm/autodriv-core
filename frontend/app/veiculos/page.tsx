@@ -4,11 +4,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { AlertTriangle, Camera, CheckCircle2, ImagePlus, Pencil, Plus, Trash2, Wrench } from "lucide-react";
+import { AlertTriangle, Camera, CheckCircle2, FileText, ImagePlus, Pencil, Plus, RefreshCw, Send, Sparkles, Trash2, Wrench } from "lucide-react";
 import { createVeiculo, listVeiculos, updateVeiculo } from "@/lib/api/veiculos";
 import { uploadVehicleImage } from "@/lib/api/images";
 import { getVehicleIntelligence, listStockIntelligence, upsertVehiclePreparationTask } from "@/lib/api/stock-intelligence";
 import { generateVehicleAd, listVehicleAds } from "@/lib/api/ads";
+import {
+  getVehiclePreparation,
+  publishVehicle,
+  recalculateVehiclePreparation,
+  suggestVehicleDescription,
+  suggestVehiclePrice,
+  suggestVehiclePriority
+} from "@/lib/api/ad-preparation";
 import { AppShell } from "@/components/layout/AppShell";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Badge } from "@/components/ui/Badge";
@@ -22,6 +30,7 @@ import { getFipeValue, listFipeBrands, listFipeModels, listFipeYears } from "@/l
 import { formatCurrency } from "@/lib/utils/formatters";
 import { fuelOptions, getCatalogBrands, getCatalogModels, getYearOptions, transmissionOptions } from "@/lib/vehicles/catalog";
 import type { PreparedAd } from "@/types/ad";
+import type { AdPreparationCheck, AdPreparationScore, AdPreparationSuggestion } from "@/types/ad-preparation";
 import type { FipeBrand, FipeModel, FipeValue, FipeYear } from "@/types/fipe";
 import type { StockVehicle, VehicleIntelligence, VehicleIntelligenceDetail, VehiclePreparationTask } from "@/types/stock-intelligence";
 import type { CreateVeiculoPayload, Veiculo } from "@/types/veiculo";
@@ -50,11 +59,20 @@ const initialForm = {
   acquisition_source: "",
   preparation_cost_estimate: "",
   preparation_cost_actual: "",
+  documentation_cost: "",
+  transport_cost: "",
+  commission_cost: "",
+  other_costs: "",
+  price_strategy: "",
+  ad_description: "",
   repair_notes: "",
   notes: "",
   preparation_items: "",
   image_urls: "",
   status: "available",
+  documentation_status: "pending",
+  documentation_notes: "",
+  legal_restriction_status: "clear",
   preparation_status: "not_started",
   ad_status: "draft",
   ad_quality_score: "0"
@@ -92,7 +110,11 @@ function getTotalCost(veiculo: Veiculo) {
   return (
     numberValue(veiculo.purchase_price) +
     numberValue(veiculo.acquisition_cost) +
-    numberValue(veiculo.preparation_cost_actual)
+    numberValue(veiculo.preparation_cost_actual) +
+    numberValue(veiculo.documentation_cost) +
+    numberValue(veiculo.transport_cost) +
+    numberValue(veiculo.commission_cost) +
+    numberValue(veiculo.other_costs)
   );
 }
 
@@ -158,11 +180,20 @@ function formFromVehicle(veiculo: Veiculo): VehicleForm {
     acquisition_source: veiculo.acquisition_source || "",
     preparation_cost_estimate: veiculo.preparation_cost_estimate == null ? "" : String(veiculo.preparation_cost_estimate),
     preparation_cost_actual: veiculo.preparation_cost_actual == null ? "" : String(veiculo.preparation_cost_actual),
+    documentation_cost: veiculo.documentation_cost == null ? "" : String(veiculo.documentation_cost),
+    transport_cost: veiculo.transport_cost == null ? "" : String(veiculo.transport_cost),
+    commission_cost: veiculo.commission_cost == null ? "" : String(veiculo.commission_cost),
+    other_costs: veiculo.other_costs == null ? "" : String(veiculo.other_costs),
+    price_strategy: veiculo.price_strategy || "",
+    ad_description: veiculo.ad_description || "",
     repair_notes: veiculo.repair_notes || "",
     notes: veiculo.notes || "",
     preparation_items: preparationItemsToText(veiculo.preparation_items),
     image_urls: (veiculo.images || []).map((image) => image.image_url).join("\n"),
     status: veiculo.status || "available",
+    documentation_status: veiculo.documentation_status || "pending",
+    documentation_notes: veiculo.documentation_notes || "",
+    legal_restriction_status: veiculo.legal_restriction_status || "clear",
     preparation_status: veiculo.preparation_status || "not_started",
     ad_status: veiculo.ad_status || "draft",
     ad_quality_score: String(veiculo.ad_quality_score || 0)
@@ -181,6 +212,51 @@ function scoreTone(score: number | null | undefined) {
   if (value >= 80) return "green";
   if (value >= 60) return "amber";
   return "red";
+}
+
+function publishTone(canPublish: boolean | null | undefined) {
+  return canPublish ? "green" : "red";
+}
+
+function preparationStatusLabel(status: string | null | undefined) {
+  const labels: Record<string, string> = {
+    blocked: "Bloqueado",
+    incomplete: "Incompleto",
+    publishable_with_attention: "Publicavel com atencao",
+    good: "Bom anuncio",
+    excellent: "Excelente"
+  };
+  return labels[String(status || "")] || status || "Nao calculado";
+}
+
+function checkStatusTone(status: AdPreparationCheck["status"]) {
+  if (status === "valid" || status === "manually_approved") return "green";
+  if (status === "warning" || status === "pending") return "amber";
+  return "red";
+}
+
+function checkStatusLabel(status: AdPreparationCheck["status"]) {
+  const labels: Record<AdPreparationCheck["status"], string> = {
+    missing: "Faltando",
+    pending: "Pendente",
+    valid: "Ok",
+    warning: "Atencao",
+    blocked: "Bloqueado",
+    manually_approved: "Aprovado manualmente"
+  };
+  return labels[status] || status;
+}
+
+function categoryLabel(category: string) {
+  const labels: Record<string, string> = {
+    photos: "Fotos",
+    fipeAndPrice: "FIPE e preco",
+    margin: "Margem",
+    description: "Descricao",
+    preparation: "Preparacao",
+    documentation: "Documentacao"
+  };
+  return labels[category] || category;
 }
 
 function taskStatusLabel(status: string) {
@@ -243,6 +319,11 @@ export default function VeiculosPage() {
   const [preparedAds, setPreparedAds] = useState<PreparedAd[]>([]);
   const [adPlatform, setAdPlatform] = useState("instagram");
   const [isGeneratingAd, setIsGeneratingAd] = useState(false);
+  const [adPreparation, setAdPreparation] = useState<AdPreparationScore | null>(null);
+  const [adSuggestions, setAdSuggestions] = useState<AdPreparationSuggestion[]>([]);
+  const [isPreparationLoading, setIsPreparationLoading] = useState(false);
+  const [preparationAction, setPreparationAction] = useState<string | null>(null);
+  const [publishNotice, setPublishNotice] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.allSettled([listVeiculos(), listStockIntelligence()])
@@ -313,6 +394,13 @@ export default function VeiculosPage() {
   const activeIntelligence =
     vehicleDetail?.intelligence ||
     (editingVehicleId ? stockInsights[editingVehicleId] : null);
+  const groupedPreparationChecks = useMemo(() => {
+    return (adPreparation?.checks || []).reduce<Record<string, AdPreparationCheck[]>>((acc, check) => {
+      if (!acc[check.category]) acc[check.category] = [];
+      acc[check.category].push(check);
+      return acc;
+    }, {});
+  }, [adPreparation]);
 
   const filtered = useMemo(() => {
     const term = query.toLowerCase();
@@ -451,7 +539,10 @@ export default function VeiculosPage() {
     setPreparationTaskForm(initialPreparationTaskForm);
     setTaskDrafts({});
     setPreparedAds([]);
+    setAdPreparation(null);
+    setAdSuggestions([]);
     setAdPlatform("instagram");
+    setPublishNotice(null);
     setManualCatalogMode(false);
     setIsModalOpen(true);
   }
@@ -465,6 +556,7 @@ export default function VeiculosPage() {
     setIsModalOpen(true);
     loadVehicleDetail(veiculo.id);
     loadVehicleAds(veiculo.id);
+    loadAdPreparation(veiculo.id);
   }
 
   function resetVehicleModal() {
@@ -476,6 +568,9 @@ export default function VeiculosPage() {
     setPreparationTaskForm(initialPreparationTaskForm);
     setTaskDrafts({});
     setPreparedAds([]);
+    setAdPreparation(null);
+    setAdSuggestions([]);
+    setPublishNotice(null);
     setAdPlatform("instagram");
     resetSelectedImages();
     setManualCatalogMode(false);
@@ -527,6 +622,95 @@ export default function VeiculosPage() {
       setPreparedAds(ads);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Nao foi possivel carregar anuncios preparados.");
+    }
+  }
+
+  async function loadAdPreparation(vehicleId: number) {
+    setIsPreparationLoading(true);
+    setPublishNotice(null);
+    try {
+      const preparation = await getVehiclePreparation(vehicleId);
+      setAdPreparation(preparation);
+      setAdSuggestions(preparation.suggestions || []);
+      setForm((current) => ({
+        ...current,
+        ad_quality_score: String(preparation.score || current.ad_quality_score),
+        ad_status: preparation.canPublish ? "ready_to_publish" : current.ad_status
+      }));
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Nao foi possivel carregar a preparacao do anuncio.");
+    } finally {
+      setIsPreparationLoading(false);
+    }
+  }
+
+  async function recalculateAdPreparation() {
+    if (!editingVehicleId) return;
+
+    setPreparationAction("recalculate");
+    setPublishNotice(null);
+    setFormError(null);
+    try {
+      const preparation = await recalculateVehiclePreparation(editingVehicleId);
+      setAdPreparation(preparation);
+      setAdSuggestions(preparation.suggestions || adSuggestions);
+      setForm((current) => ({
+        ...current,
+        ad_quality_score: String(preparation.score || 0),
+        ad_status: preparation.canPublish ? "ready_to_publish" : "blocked_incomplete"
+      }));
+      const refreshed = await listVeiculos();
+      setVeiculos(refreshed);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Nao foi possivel recalcular o checklist.");
+    } finally {
+      setPreparationAction(null);
+    }
+  }
+
+  async function createAdSuggestion(type: "description" | "price" | "priority") {
+    if (!editingVehicleId) return;
+
+    setPreparationAction(type);
+    setPublishNotice(null);
+    setFormError(null);
+    try {
+      const suggestion =
+        type === "description"
+          ? await suggestVehicleDescription(editingVehicleId)
+          : type === "price"
+            ? await suggestVehiclePrice(editingVehicleId)
+            : await suggestVehiclePriority(editingVehicleId);
+      setAdSuggestions((current) => [suggestion, ...current.filter((item) => item.id !== suggestion.id)]);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Nao foi possivel gerar a sugestao.");
+    } finally {
+      setPreparationAction(null);
+    }
+  }
+
+  async function publishPreparedVehicle() {
+    if (!editingVehicleId || !adPreparation?.canPublish) return;
+
+    setPreparationAction("publish");
+    setPublishNotice(null);
+    setFormError(null);
+    try {
+      const result = await publishVehicle(editingVehicleId);
+      setAdPreparation(result.preparation);
+      setPublishNotice("Veiculo publicado com checklist aprovado pelo backend.");
+      setForm((current) => ({
+        ...current,
+        ad_status: result.vehicle.ad_status || "published",
+        status: result.vehicle.status || current.status,
+        ad_quality_score: String(result.preparation.score || current.ad_quality_score)
+      }));
+      const refreshed = await listVeiculos();
+      setVeiculos(refreshed);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Nao foi possivel publicar o veiculo.");
+    } finally {
+      setPreparationAction(null);
     }
   }
 
@@ -665,11 +849,20 @@ export default function VeiculosPage() {
       preparation_status: form.preparation_status,
       preparation_cost_estimate: toNumberOrNull(form.preparation_cost_estimate),
       preparation_cost_actual: toNumberOrNull(form.preparation_cost_actual),
+      documentation_cost: toNumberOrNull(form.documentation_cost),
+      transport_cost: toNumberOrNull(form.transport_cost),
+      commission_cost: toNumberOrNull(form.commission_cost),
+      other_costs: toNumberOrNull(form.other_costs),
+      price_strategy: form.price_strategy.trim() || null,
+      ad_description: form.ad_description.trim() || null,
       repair_notes: form.repair_notes.trim() || null,
       notes: form.notes.trim() || null,
       preparation_items: parsePreparationItems(form.preparation_items),
       image_urls: imageUrlsFromText(form.image_urls),
       status: form.status,
+      documentation_status: form.documentation_status,
+      documentation_notes: form.documentation_notes.trim() || null,
+      legal_restriction_status: form.legal_restriction_status,
       ad_status: form.ad_status,
       ad_quality_score: Number(form.ad_quality_score || 0)
     };
@@ -866,6 +1059,11 @@ export default function VeiculosPage() {
               <Input label="Origem" value={form.acquisition_source} onChange={(event) => updateField("acquisition_source", event.target.value)} placeholder="Troca, compra direta, repasse" />
               <Input label="Preparacao estimada" inputMode="decimal" value={form.preparation_cost_estimate} onChange={(event) => updateField("preparation_cost_estimate", event.target.value)} />
               <Input label="Preparacao realizada" inputMode="decimal" value={form.preparation_cost_actual} onChange={(event) => updateField("preparation_cost_actual", event.target.value)} />
+              <Input label="Custo documental" inputMode="decimal" value={form.documentation_cost} onChange={(event) => updateField("documentation_cost", event.target.value)} />
+              <Input label="Transporte" inputMode="decimal" value={form.transport_cost} onChange={(event) => updateField("transport_cost", event.target.value)} />
+              <Input label="Comissao prevista" inputMode="decimal" value={form.commission_cost} onChange={(event) => updateField("commission_cost", event.target.value)} />
+              <Input label="Outros custos" inputMode="decimal" value={form.other_costs} onChange={(event) => updateField("other_costs", event.target.value)} />
+              <Input label="Estrategia de preco" value={form.price_strategy} onChange={(event) => updateField("price_strategy", event.target.value)} placeholder="competitive, fast_sale, premium..." />
             </div>
           </section>
 
@@ -1063,6 +1261,35 @@ export default function VeiculosPage() {
             </label>
           </section>
 
+          <section className="grid gap-4 md:grid-cols-2">
+            <label className="block text-sm font-medium text-slate-700 md:col-span-2">
+              <span className="mb-2 flex items-center gap-2"><FileText className="h-4 w-4" /> Descricao comercial do anuncio</span>
+              <textarea className="min-h-28 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.ad_description} onChange={(event) => updateField("ad_description", event.target.value)} placeholder="Descricao segura com dados reais do veiculo, diferenciais e chamada para contato." />
+            </label>
+            <label className="block text-sm font-medium text-slate-700">
+              <span className="mb-2 block">Documentacao</span>
+              <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.documentation_status} onChange={(event) => updateField("documentation_status", event.target.value)}>
+                <option value="pending">Pendente</option>
+                <option value="checked">Conferida</option>
+                <option value="ready">Pronta para venda</option>
+                <option value="blocked">Bloqueada</option>
+              </select>
+            </label>
+            <label className="block text-sm font-medium text-slate-700">
+              <span className="mb-2 block">Restricao legal</span>
+              <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.legal_restriction_status} onChange={(event) => updateField("legal_restriction_status", event.target.value)}>
+                <option value="clear">Sem restricao critica</option>
+                <option value="unknown">Nao conferida</option>
+                <option value="restriction">Com restricao</option>
+                <option value="blocked">Bloqueio critico</option>
+              </select>
+            </label>
+            <label className="block text-sm font-medium text-slate-700 md:col-span-2">
+              <span className="mb-2 block">Notas de documentacao</span>
+              <textarea className="min-h-20 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.documentation_notes} onChange={(event) => updateField("documentation_notes", event.target.value)} placeholder="Debitos, multas, transferencia, alienacao ou pontos de conferencia." />
+            </label>
+          </section>
+
           <section className="rounded-lg border border-slate-200 p-4">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -1081,6 +1308,146 @@ export default function VeiculosPage() {
                 </Button>
               </div>
             </div>
+
+            {editingVehicleId ? (
+              <div className="mb-5 space-y-4 rounded-md border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={scoreTone(adPreparation?.score || 0)}>
+                        Score {adPreparation?.score ?? 0}/100
+                      </Badge>
+                      <Badge tone={publishTone(adPreparation?.canPublish)}>
+                        {adPreparation?.canPublish ? "Pronto para publicar" : "Publicacao bloqueada"}
+                      </Badge>
+                      <Badge variant="neutral">
+                        {isPreparationLoading ? "Carregando..." : preparationStatusLabel(adPreparation?.grade)}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      O botao Publicar usa a validacao do backend. Quando houver bloqueios, o envio fica travado ate as pendencias serem corrigidas.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button type="button" variant="secondary" disabled={Boolean(preparationAction)} onClick={recalculateAdPreparation}>
+                      <RefreshCw className="h-4 w-4" />
+                      {preparationAction === "recalculate" ? "Recalculando..." : "Recalcular"}
+                    </Button>
+                    <Button type="button" disabled={!adPreparation?.canPublish || preparationAction === "publish"} onClick={publishPreparedVehicle}>
+                      <Send className="h-4 w-4" />
+                      {preparationAction === "publish" ? "Publicando..." : "Publicar"}
+                    </Button>
+                  </div>
+                </div>
+
+                {publishNotice ? <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{publishNotice}</p> : null}
+
+                {adPreparation?.blockingReasons.length ? (
+                  <div className="rounded-md border border-red-100 bg-white p-3">
+                    <p className="text-xs font-semibold text-red-700">Bloqueios para publicacao</p>
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      {adPreparation.blockingReasons.map((item) => (
+                        <div key={item.key} className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-800">
+                          <p className="font-medium">{categoryLabel(item.category)}</p>
+                          <p>{item.message}</p>
+                          {item.actionHint ? <p className="mt-1 text-red-700">{item.actionHint}</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {adPreparation?.warnings.length ? (
+                  <div className="rounded-md border border-amber-100 bg-white p-3">
+                    <p className="text-xs font-semibold text-amber-700">Alertas</p>
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      {adPreparation.warnings.slice(0, 6).map((item) => (
+                        <div key={item.key} className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          <p className="font-medium">{categoryLabel(item.category)}</p>
+                          <p>{item.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {Object.keys(groupedPreparationChecks).length ? (
+                  <div className="grid gap-3 xl:grid-cols-2">
+                    {Object.entries(groupedPreparationChecks).map(([category, checks]) => (
+                      <div key={category} className="rounded-md bg-white p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-slate-700">{categoryLabel(category)}</p>
+                          <span className="text-xs text-slate-500">{adPreparation?.breakdown?.[category] ?? 0} pts</span>
+                        </div>
+                        <div className="space-y-2">
+                          {checks.map((check) => (
+                            <div key={check.key} className="flex items-start gap-2 rounded-md border border-slate-100 px-2 py-2">
+                              {check.status === "valid" || check.status === "manually_approved" ? (
+                                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                              ) : (
+                                <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-xs font-medium text-slate-800">{check.message || check.key}</p>
+                                  <Badge tone={checkStatusTone(check.status)}>{checkStatusLabel(check.status)}</Badge>
+                                </div>
+                                {check.actionHint ? <p className="mt-1 text-xs text-slate-500">{check.actionHint}</p> : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">Clique em Recalcular para gerar o checklist completo deste veiculo.</p>
+                )}
+
+                <div className="rounded-md bg-white p-3">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">Sugestoes automaticas</p>
+                      <p className="mt-1 text-xs text-slate-500">Geradas pelo backend com regras seguras, sem chamar IA direto no navegador.</p>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button type="button" size="sm" variant="secondary" disabled={Boolean(preparationAction)} onClick={() => createAdSuggestion("description")}>
+                        <Sparkles className="h-3.5 w-3.5" />
+                        {preparationAction === "description" ? "Gerando..." : "Descricao"}
+                      </Button>
+                      <Button type="button" size="sm" variant="secondary" disabled={Boolean(preparationAction)} onClick={() => createAdSuggestion("price")}>
+                        {preparationAction === "price" ? "Calculando..." : "Preco"}
+                      </Button>
+                      <Button type="button" size="sm" variant="secondary" disabled={Boolean(preparationAction)} onClick={() => createAdSuggestion("priority")}>
+                        {preparationAction === "priority" ? "Priorizando..." : "Prioridade"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {adSuggestions.length ? (
+                    <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                      {adSuggestions.slice(0, 6).map((suggestion) => (
+                        <div key={suggestion.id} className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-slate-700">{suggestion.suggestion_type || "sugestao"}</p>
+                            <Badge variant="neutral">{suggestion.provider || "rule_based"}</Badge>
+                          </div>
+                          {suggestion.payload.suggestedTitle ? <p className="mt-2 text-sm font-medium text-slate-950">{suggestion.payload.suggestedTitle}</p> : null}
+                          {suggestion.payload.suggestedDescription ? <p className="mt-2 line-clamp-6 text-xs text-slate-600">{suggestion.payload.suggestedDescription}</p> : null}
+                          {suggestion.payload.suggestedPrice ? <p className="mt-2 text-sm font-semibold text-slate-950">{formatCurrency(suggestion.payload.suggestedPrice)}</p> : null}
+                          {suggestion.payload.priority ? <p className="mt-2 text-sm font-semibold text-slate-950">{suggestion.payload.priority}</p> : null}
+                          {suggestion.payload.reason ? <p className="mt-2 text-xs text-slate-600">{suggestion.payload.reason}</p> : null}
+                          {suggestion.payload.reasons?.length ? <p className="mt-2 text-xs text-slate-500">{suggestion.payload.reasons.join(" ")}</p> : null}
+                          {suggestion.payload.warnings?.length ? <p className="mt-2 text-xs text-amber-700">{suggestion.payload.warnings.join(" ")}</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs text-slate-500">Nenhuma sugestao gerada ainda.</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
 
             {!editingVehicleId ? (
               <p className="text-xs text-slate-500">Salve o veiculo uma vez para preparar anuncios.</p>
@@ -1147,6 +1514,8 @@ export default function VeiculosPage() {
               <span className="mb-2 block">Anuncio</span>
               <select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={form.ad_status} onChange={(event) => updateField("ad_status", event.target.value)}>
                 <option value="draft">Rascunho</option>
+                <option value="blocked_incomplete">Bloqueado/incompleto</option>
+                <option value="ready_to_publish">Pronto para publicar</option>
                 <option value="published">Publicado</option>
                 <option value="paused">Pausado</option>
                 <option value="needs_review">Revisar</option>

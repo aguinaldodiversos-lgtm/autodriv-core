@@ -8,6 +8,9 @@ async function publishCNC(req, res) {
     );
     res.json(data);
   } catch (err) {
+    if (err.payload) {
+      return res.status(err.statusCode || 400).json(err.payload);
+    }
     res.status(400).json({ error: err.message });
   }
 }

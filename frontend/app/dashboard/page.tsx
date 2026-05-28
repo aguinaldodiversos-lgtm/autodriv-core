@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { Activity, Clock, Inbox, UsersRound } from "lucide-react";
 import { getOperationsDashboard } from "@/lib/api/dashboard";
 import { sendAiActionFeedback } from "@/lib/api/ia";
+import { claimSellerAction, completeSellerAction } from "@/lib/api/seller-actions";
 import { AppShell } from "@/components/layout/AppShell";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { PipelineSummary } from "@/components/dashboard/PipelineSummary";
+import { WhatsappHotLeads } from "@/components/dashboard/WhatsappHotLeads";
 import { ActionOutcomeModal } from "@/components/intelligence/ActionOutcomeModal";
 import { PriorityActionList } from "@/components/intelligence/PriorityActionList";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
@@ -18,6 +20,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [decidingId, setDecidingId] = useState<number | null>(null);
+  const [sellerActionBusyId, setSellerActionBusyId] = useState<number | null>(null);
   const [outcomeAction, setOutcomeAction] = useState<IntelligenceAction | null>(null);
 
   useEffect(() => {
@@ -50,6 +53,55 @@ export default function DashboardPage() {
       setError(err instanceof Error ? err.message : "Nao foi possivel registrar o feedback.");
     } finally {
       setDecidingId(null);
+    }
+  }
+
+  async function claimAction(actionId: number) {
+    setError(null);
+    setSellerActionBusyId(actionId);
+    try {
+      const updated = await claimSellerAction(actionId);
+      setData((current) => {
+        if (!current?.whatsapp_ai) return current;
+        return {
+          ...current,
+          whatsapp_ai: {
+            ...current.whatsapp_ai,
+            seller_actions: current.whatsapp_ai.seller_actions.map((item) =>
+              item.id === actionId ? { ...item, ...updated, status: "in_progress" } : item
+            )
+          }
+        };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nao foi possivel assumir a acao.");
+    } finally {
+      setSellerActionBusyId(null);
+    }
+  }
+
+  async function completeAction(actionId: number, outcomeType: "reply" | "appointment" | "proposal" | "sale" | "no_result") {
+    setError(null);
+    setSellerActionBusyId(actionId);
+    try {
+      await completeSellerAction(actionId, { outcome_type: outcomeType });
+      setData((current) => {
+        if (!current?.whatsapp_ai) return current;
+        return {
+          ...current,
+          whatsapp_ai: {
+            ...current.whatsapp_ai,
+            seller_actions: current.whatsapp_ai.seller_actions.filter((item) => item.id !== actionId),
+            human_required_leads: current.whatsapp_ai.human_required_leads.filter(
+              (lead) => lead.seller_action_id !== actionId
+            )
+          }
+        };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nao foi possivel registrar o resultado.");
+    } finally {
+      setSellerActionBusyId(null);
     }
   }
 
@@ -95,6 +147,12 @@ export default function DashboardPage() {
               icon={<Inbox className="h-5 w-5" />}
             />
             <MetricCard
+              label="WhatsApp quente"
+              value={data.summary_cards.find((item) => item.key === "whatsapp_hot_leads")?.value || 0}
+              detail="Leads aguardando humano"
+              icon={<UsersRound className="h-5 w-5" />}
+            />
+            <MetricCard
               label="SLA vencido"
               value={(data.inbox.summary.overdue_sla || 0) + (data.pipeline.summary.overdue_sla || 0)}
               detail="Atendimentos ou etapas atrasadas"
@@ -107,6 +165,14 @@ export default function DashboardPage() {
             decidingId={decidingId}
             onDecision={decideAction}
             limit={8}
+          />
+
+          <WhatsappHotLeads
+            leads={data.whatsapp_ai?.human_required_leads || []}
+            actions={data.whatsapp_ai?.seller_actions || []}
+            busyId={sellerActionBusyId}
+            onClaim={claimAction}
+            onComplete={completeAction}
           />
 
           <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">

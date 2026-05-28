@@ -422,6 +422,20 @@ describe("intelligence daily actions", () => {
           ]
         };
       }
+      if (s.includes("GROUP BY COALESCE(a.impact_area")) {
+        seenQueries.push("impact_area");
+        return {
+          rows: [
+            {
+              impact_area: "sales",
+              total_actions: 3,
+              accepted_actions: 2,
+              outcomes_recorded: 1,
+              outcome_value_total: "90000"
+            }
+          ]
+        };
+      }
       if (s.includes("COUNT(*)::int AS total_actions")) {
         seenQueries.push("summary");
         assert.deepStrictEqual(params, [7, 30]);
@@ -469,7 +483,8 @@ describe("intelligence daily actions", () => {
       "summary",
       "outcome_type",
       "action_type",
-      "seller"
+      "seller",
+      "impact_area"
     ]);
     assert.strictEqual(res.body.period_days, 30);
     assert.strictEqual(res.body.summary.acceptance_rate, 50);

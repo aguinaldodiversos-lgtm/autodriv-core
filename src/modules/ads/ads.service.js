@@ -1,6 +1,7 @@
 const pool = require("../../config/db");
 const repo = require("./ads.repository");
 const { calculateVehicleSignals } = require("../stock_intelligence/stockIntelligence.service");
+const adPreparation = require("../ad_preparation/adPreparation.service");
 
 const platformLabels = {
   instagram: "Instagram",
@@ -142,6 +143,7 @@ async function generateAd(data, user) {
   const images = await loadVehicleImages(vehicle.id);
   const platform = data.platform || "instagram";
   const intelligence = calculateVehicleSignals(vehicle);
+  const readiness = await adPreparation.evaluate(vehicle.id, user, { persist: true });
   const copy = buildAdCopy(vehicle, platform);
   const checklist = buildChecklist(vehicle, images, intelligence);
   const photoPlan = buildPhotoPlan(images);
@@ -152,7 +154,7 @@ async function generateAd(data, user) {
     title: data.title || copy.title,
     description: data.description || copy.description,
     platform,
-    status: checklist.every((item) => item.done) ? "ready" : "draft",
+    status: readiness.canPublish ? "ready" : "draft",
     metadata: {
       caption: copy.caption,
       hashtags: copy.hashtags,
@@ -177,6 +179,13 @@ async function generateAd(data, user) {
         margin_percent: intelligence.margin_percent,
         fipe_difference_percent: intelligence.fipe_difference_percent,
         suggestions: intelligence.suggestions
+      },
+      preparation_readiness: {
+        score: readiness.score,
+        grade: readiness.grade,
+        can_publish: readiness.canPublish,
+        blocking_reasons: readiness.blockingReasons,
+        warnings: readiness.warnings
       },
       images: images.map((image) => image.image_url),
       generated_by: "autodriv_ad_preparation"

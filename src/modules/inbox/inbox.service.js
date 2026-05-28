@@ -162,19 +162,64 @@ async function findThread(did, id) {
 
 async function claimThread(user, threadId) {
   const did = dealershipId(user);
-  const { rows } = await pool.query(
-    `UPDATE inbox_threads
-     SET claimed_by = $1,
-         claimed_at = NOW(),
-         assigned_user_id = COALESCE(assigned_user_id, $1),
-         status = CASE WHEN status IN ('closed', 'archived') THEN 'open' ELSE status END,
-         updated_at = NOW()
-     WHERE id = $2 AND dealership_id = $3
-     RETURNING *`,
-    [user.id || null, threadId, did]
-  );
-  if (!rows[0]) throw httpError("Conversa nao encontrada", 404);
-  return rows[0];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `UPDATE inbox_threads
+       SET claimed_by = $1,
+           claimed_at = NOW(),
+           assigned_user_id = COALESCE(assigned_user_id, $1),
+           status = CASE WHEN status IN ('closed', 'archived', 'waiting_seller') THEN 'open' ELSE status END,
+           metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
+           updated_at = NOW()
+       WHERE id = $3 AND dealership_id = $4
+       RETURNING *`,
+      [
+        user.id || null,
+        JSON.stringify({ claimed_by_user: user.id || null, ai_handoff_assumed: true }),
+        threadId,
+        did
+      ]
+    );
+    const thread = rows[0];
+    if (!thread) throw httpError("Conversa nao encontrada", 404);
+
+    await client.query(
+      `UPDATE leads
+       SET assigned_user_id = COALESCE(assigned_user_id, $1),
+           status = CASE WHEN status = 'human_required' THEN 'in_progress' ELSE status END,
+           ai_whatsapp_status = CASE
+             WHEN ai_whatsapp_status = 'human_required' THEN 'human_active'
+             ELSE ai_whatsapp_status
+           END,
+           updated_at = NOW()
+       WHERE id = $2 AND dealership_id = $3`,
+      [user.id || null, thread.lead_id, did]
+    );
+
+    await client.query(
+      `UPDATE seller_actions
+       SET claimed_by = COALESCE(claimed_by, $1),
+           claimed_at = COALESCE(claimed_at, NOW()),
+           assigned_seller_id = COALESCE(assigned_seller_id, $1),
+           status = CASE WHEN status = 'pending' THEN 'in_progress' ELSE status END,
+           updated_at = NOW()
+       WHERE lead_id = $2
+         AND dealership_id = $3
+         AND status = 'pending'
+         AND source = 'ai_whatsapp'`,
+      [user.id || null, thread.lead_id, did]
+    );
+
+    await client.query("COMMIT");
+    return thread;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 async function updateThread(user, threadId, data) {
@@ -251,9 +296,15 @@ async function sendHumanMessage(user, threadOrLeadId, message) {
     );
     await client.query(
       `UPDATE leads
-       SET last_contact_at = NOW(), updated_at = NOW()
+       SET last_contact_at = NOW(),
+           assigned_user_id = COALESCE(assigned_user_id, $3),
+           ai_whatsapp_status = CASE
+             WHEN ai_whatsapp_status = 'human_required' THEN 'human_active'
+             ELSE ai_whatsapp_status
+           END,
+           updated_at = NOW()
        WHERE id = $1 AND dealership_id = $2`,
-      [lead.id, did]
+      [lead.id, did, user.id || null]
     );
     await client.query("COMMIT");
 

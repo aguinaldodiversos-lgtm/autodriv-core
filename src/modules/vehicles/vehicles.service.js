@@ -79,10 +79,19 @@ function buildVehiclePayload(data, dealership) {
     preparation_cost_estimate: data.preparation_cost_estimate ?? 0,
     preparation_cost_actual: data.preparation_cost_actual ?? 0,
     notes: data.notes ?? null,
+    ad_description: data.ad_description ?? null,
     repair_notes: data.repair_notes ?? null,
     preparation_items: Array.isArray(data.preparation_items)
       ? data.preparation_items
       : [],
+    documentation_status: data.documentation_status ?? "pending",
+    documentation_notes: data.documentation_notes ?? null,
+    legal_restriction_status: data.legal_restriction_status ?? "unknown",
+    documentation_cost: data.documentation_cost ?? 0,
+    transport_cost: data.transport_cost ?? 0,
+    commission_cost: data.commission_cost ?? 0,
+    other_costs: data.other_costs ?? 0,
+    price_strategy: data.price_strategy ?? null,
     ad_quality_score: data.ad_quality_score ?? 0,
     ad_status: data.ad_status || "draft"
   };

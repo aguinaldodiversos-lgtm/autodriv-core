@@ -1,7 +1,4 @@
-const pool = require("../../config/db");
-const conversationRepo = require("../lead_conversations/leadConversations.repository");
-const followupService = require("../followups/followup.service");
-const leadAiReception = require("../lead_ai_reception/leadAiReception.service");
+const whatsappAi = require("../whatsapp_ai/whatsappAi.service");
 const { getSession } = require("../whatsapp_baileys/session.manager");
 
 function canProcess(dealershipId, phone) {
@@ -30,140 +27,29 @@ async function sendMessage(dealershipId, phone, text) {
   await sock.sendMessage(jid, { text });
 }
 
-async function upsertWhatsAppThread(dealershipId, lead, phone) {
-  const externalThreadId = `whatsapp:${String(phone).replace(/\D/g, "")}`;
-  const result = await pool.query(
-    `INSERT INTO inbox_threads
-      (dealership_id, lead_id, channel, external_thread_id, subject,
-       status, assigned_user_id, sla_due_at, last_message_at, unread_count, metadata)
-     VALUES ($1,$2,'whatsapp',$3,$4,'open',$5,NOW() + INTERVAL '1 hour',NOW(),1,$6::jsonb)
-     ON CONFLICT (dealership_id, channel, external_thread_id)
-     WHERE external_thread_id IS NOT NULL
-     DO UPDATE SET
-       lead_id = EXCLUDED.lead_id,
-       status = 'open',
-       last_message_at = NOW(),
-       unread_count = inbox_threads.unread_count + 1,
-       updated_at = NOW()
-     RETURNING *`,
-    [
-      dealershipId,
-      lead.id,
-      externalThreadId,
-      lead.name || lead.client_name || "Lead WhatsApp",
-      lead.assigned_user_id || null,
-      JSON.stringify({ phone })
-    ]
-  );
-  return result.rows[0];
-}
-
-async function handleIncomingMessage({ dealershipId, phone, text }) {
+async function handleIncomingMessage({
+  dealershipId,
+  phone,
+  text,
+  providerMessageId,
+  rawPayload,
+  messageType,
+  customerName,
+  sendMessage: sendMessageOverride
+}) {
   try {
     if (!canProcess(dealershipId, phone)) return;
 
-    let leadResult = await pool.query(
-      `SELECT * FROM leads
-       WHERE dealership_id = $1
-       AND phone = $2`,
-      [dealershipId, phone]
-    );
-
-    let lead = leadResult.rows[0];
-
-    if (!lead) {
-      const insert = await pool.query(
-        `INSERT INTO leads
-         (dealership_id, name, phone, status, source, ai_mode, created_at)
-         VALUES ($1, 'Lead WhatsApp', $2, 'new', 'whatsapp', 'scheduled', NOW())
-         RETURNING *`,
-        [dealershipId, phone]
-      );
-
-      lead = insert.rows[0];
-      await followupService.scheduleLeadFollowups(lead, "full");
-    }
-
-    const thread = await upsertWhatsAppThread(dealershipId, lead, phone);
-
-    await conversationRepo.saveMessage({
+    return await whatsappAi.processInboundMessage({
       dealershipId,
-      leadId: lead.id,
-      inboxThreadId: thread.id,
-      sender: "client",
-      channel: "whatsapp",
-      direction: "inbound",
-      message: text
+      phone,
+      text,
+      providerMessageId,
+      rawPayload,
+      messageType,
+      customerName,
+      sendMessage: sendMessageOverride || ((reply) => sendMessage(dealershipId, phone, reply))
     });
-
-    if (lead.ai_mode === "scheduled") {
-      await pool.query(
-        `UPDATE leads
-         SET ai_mode = 'activating'
-         WHERE id = $1 AND dealership_id = $2`,
-        [lead.id, dealershipId]
-      );
-
-      await followupService.cancelLeadFollowups(lead.id);
-    }
-
-    const history = await conversationRepo.getRecentHistory(
-      lead.id,
-      dealershipId,
-      15
-    );
-
-    const result = await leadAiReception.handleLeadMessage({
-      leadId: lead.id,
-      dealershipId,
-      message: text,
-      history
-    });
-
-    if (!result?.reply) return;
-
-    await conversationRepo.saveMessage({
-      dealershipId,
-      leadId: lead.id,
-      inboxThreadId: thread.id,
-      sender: "ai",
-      channel: "whatsapp",
-      direction: "outbound",
-      message: result.reply,
-      metadata: {
-        ai_reception: result.analysis || {},
-        handoff_to_human: Boolean(result.handoffToHuman)
-      }
-    });
-
-    await pool.query(
-      `UPDATE inbox_threads
-       SET status = $1,
-           last_message_at = NOW(),
-           unread_count = $2,
-           metadata = metadata || $3::jsonb,
-           updated_at = NOW()
-       WHERE id = $4 AND dealership_id = $5`,
-      [
-        result.handoffToHuman ? "waiting_seller" : "waiting_customer",
-        result.handoffToHuman ? 1 : 0,
-        JSON.stringify({
-          ai_reception: result.analysis || {},
-          handoff_to_human: Boolean(result.handoffToHuman)
-        }),
-        thread.id,
-        dealershipId
-      ]
-    );
-
-    await pool.query(
-      `UPDATE leads
-       SET ai_mode = 'active'
-       WHERE id = $1 AND dealership_id = $2`,
-      [lead.id, dealershipId]
-    );
-
-    await sendMessage(dealershipId, phone, result.reply);
   } catch (err) {
     console.error("Erro no handleIncomingMessage:", err);
   }

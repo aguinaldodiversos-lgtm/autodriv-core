@@ -121,7 +121,7 @@ describe("services: user.dealership_id e user.id", () => {
       if (String(sql).includes("proposals") && String(sql).includes("COUNT")) {
         return { rows: [{ count: "0" }] };
       }
-      if (String(sql).includes("financial_transactions")) {
+      if (String(sql).includes("financial_transactions") || String(sql).includes("finance_entries")) {
         return { rows: [{ count: "0" }] };
       }
       return { rows: [] };
@@ -208,11 +208,18 @@ describe("services: user.dealership_id e user.id", () => {
       "carrosNaCidade.adapter"
     ));
     const repo = require(path.join("..", "src", "modules", "integrations", "integrations.repository"));
+    const adPreparation = require(path.join("..", "src", "modules", "ad_preparation", "adPreparation.service"));
     const oPub = cnc.publishVehicle;
     const oCreate = repo.create;
+    const oAssertCanPublish = adPreparation.assertCanPublish;
     const oQ = pool.query;
     let vehicleParams;
+    let readinessParams;
     cnc.publishVehicle = async () => ({ id: "ext-1" });
+    adPreparation.assertCanPublish = async (vehicleId, currentUser) => {
+      readinessParams = [vehicleId, currentUser.dealership_id];
+      return { canPublish: true };
+    };
     let created;
     repo.create = async (row) => {
       created = row;
@@ -230,11 +237,13 @@ describe("services: user.dealership_id e user.id", () => {
     };
     try {
       await service.publishToCarrosNaCidade(1, user(101));
+      assert.deepStrictEqual(readinessParams, [1, 101]);
       assert.deepStrictEqual(vehicleParams, [1, 101]);
       assert.strictEqual(created.dealership_id, 101);
     } finally {
       cnc.publishVehicle = oPub;
       repo.create = oCreate;
+      adPreparation.assertCanPublish = oAssertCanPublish;
       pool.query = oQ;
     }
   });

@@ -50,6 +50,10 @@ const migrations = [
   require("./migrations/043_vehicle_intake_details"),
   require("./migrations/044_vehicle_fipe_reference_codes"),
   require("./migrations/045_ads_preparation_metadata"),
+  require("./migrations/046_billing_mercado_pago"),
+  require("./migrations/047_whatsapp_ai_pre_attendance"),
+  require("./migrations/048_seller_action_outcomes"),
+  require("./migrations/049_ad_preparation_module"),
 ];
 
 const path = require("path");

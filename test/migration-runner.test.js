@@ -20,7 +20,7 @@ describe("manifest de migrations", () => {
     assert.strictEqual(MIGRATIONS[0].name, "001_dealerships");
     assert.strictEqual(
       MIGRATIONS[MIGRATIONS.length - 1].name,
-      "040_intelligence_action_outcomes"
+      "049_ad_preparation_module"
     );
   });
 

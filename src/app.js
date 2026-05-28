@@ -175,8 +175,37 @@ app.get("/ready", async (req, res) => {
 const authRoutes = require("./modules/auth/auth.routes");
 app.use("/api/auth", authLimiter, authRoutes);
 
+const billingRoutes = require("./modules/billing/billing.routes");
+app.use("/api/billing", auth, billingRoutes);
+
+const billingAdminRoutes = require("./modules/billing/billing.admin.routes");
+const billingAdminSubscriptionsRoutes = require("./modules/billing/billing.admin.subscriptions.routes");
+app.use(
+  "/api/admin/billing",
+  auth,
+  auth.requireRoles("super_admin", "support"),
+  billingAdminRoutes
+);
+app.use(
+  "/api/admin/subscriptions",
+  auth,
+  auth.requireRoles("super_admin", "support"),
+  billingAdminSubscriptionsRoutes
+);
+
+const billingWebhookRoutes = require("./modules/billing/billing.webhook.routes");
+app.use("/api/webhooks", billingWebhookRoutes);
+
 const webhookRoutes = require("./modules/lead_sources/webhook.routes");
 app.use("/api/webhooks", webhookRoutes);
+
+const whatsappAiAdminRoutes = require("./modules/whatsapp_ai/whatsappAi.routes");
+app.use(
+  "/api/admin/whatsapp-ai",
+  auth,
+  auth.requireRoles("super_admin", "support", "admin", "manager"),
+  whatsappAiAdminRoutes
+);
 
 const mountRoutes = [
   ["/api/vehicles", require("./modules/vehicles/vehicles.routes")],
@@ -211,7 +240,9 @@ const mountRoutes = [
   ["/api/finance", require("./modules/finance/finance.routes")],
   ["/api/fipe", require("./modules/fipe/fipe.routes")],
   ["/api/proposals", require("./modules/proposals/proposals.routes")],
+  ["/api/vehicles", require("./modules/ad_preparation/adPreparation.routes")],
   ["/api/tasks", require("./modules/tasks/tasks.routes")],
+  ["/api/seller-actions", require("./modules/seller_actions/sellerActions.routes")],
   ["/api/ads", require("./modules/ads/ads.routes")],
   ["/api/integrations", require("./modules/integrations/integrations.routes")],
   ["/api/maintenance", require("./modules/maintenance/maintenance.routes")],

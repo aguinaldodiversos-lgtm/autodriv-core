@@ -2,6 +2,7 @@ const express = require("express");
 const controller = require("./whatsapp.controller");
 const auth = require("../../middlewares/auth");
 const checkPlanLimit = require("../../middlewares/plan.middleware");
+const { requireBillingEntitlement } = require("../billing/entitlement.guard");
 
 const router = express.Router();
 
@@ -11,6 +12,7 @@ const router = express.Router();
 router.post(
   "/connect",
   auth,
+  requireBillingEntitlement("whatsapp:connect"),
   checkPlanLimit("whatsapp"),
   controller.connect
 );

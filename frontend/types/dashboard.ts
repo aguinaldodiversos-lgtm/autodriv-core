@@ -29,11 +29,48 @@ export type InboxConversation = {
   id: number;
   channel: string;
   status: string;
+  lead_status?: string | null;
   lead_name?: string | null;
   lead_phone?: string | null;
   assigned_user_name?: string | null;
   unread_count?: number;
   sla_due_at?: string | null;
+  last_message_at?: string | null;
+};
+
+export type SellerAction = {
+  id: number;
+  lead_id?: number | null;
+  inbox_thread_id?: number | null;
+  type: string;
+  priority: "low" | "medium" | "high" | "urgent";
+  title: string;
+  description?: string | null;
+  status: "pending" | "in_progress" | "done" | "dismissed";
+  due_at?: string | null;
+  lead_name?: string | null;
+  lead_phone?: string | null;
+  intent?: string | null;
+  lead_score?: number | null;
+  inbox_status?: string | null;
+  claimed_by_name?: string | null;
+};
+
+export type HumanRequiredLead = {
+  id: number;
+  name?: string | null;
+  phone?: string | null;
+  intent?: string | null;
+  intent_confidence?: number | string | null;
+  lead_score?: number | null;
+  status: string;
+  ai_whatsapp_status?: string | null;
+  inbox_thread_id?: number | null;
+  inbox_status?: string | null;
+  seller_action_id?: number | null;
+  seller_action_type?: string | null;
+  seller_action_priority?: "low" | "medium" | "high" | "urgent" | null;
+  seller_action_title?: string | null;
   last_message_at?: string | null;
 };
 
@@ -60,6 +97,11 @@ export type OperationsDashboard = {
   inbox: {
     summary: Record<string, number>;
     conversations: InboxConversation[];
+  };
+  whatsapp_ai?: {
+    summary: Record<string, number>;
+    human_required_leads: HumanRequiredLead[];
+    seller_actions: SellerAction[];
   };
   pipeline: {
     summary: {

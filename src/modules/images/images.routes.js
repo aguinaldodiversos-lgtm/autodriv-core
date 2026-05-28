@@ -3,6 +3,7 @@ const multer = require("multer");
 const controller = require("./images.controller");
 const auth = require("../../middlewares/auth");
 const upload = require("../../middlewares/upload.middleware");
+const { requireBillingEntitlement } = require("../billing/entitlement.guard");
 
 const router = express.Router();
 
@@ -31,6 +32,7 @@ function vehicleImageUpload(req, res, next) {
 router.post(
   "/:vehicleId",
   auth,
+  requireBillingEntitlement("images:upload"),
   vehicleImageUpload,
   controller.upload
 );

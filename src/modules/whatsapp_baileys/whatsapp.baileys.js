@@ -36,10 +36,25 @@ async function startWhatsApp(dealershipId) {
 
       if (!text) return;
 
+      const messageType =
+        msg.message.conversation || msg.message.extendedTextMessage
+          ? "text"
+          : msg.message.imageMessage
+            ? "image"
+            : "unknown";
+
       await whatsappService.handleIncomingMessage({
         dealershipId: id,
         phone,
-        text
+        text,
+        providerMessageId: msg.key.id || null,
+        messageType,
+        rawPayload: {
+          key: msg.key,
+          messageTimestamp: msg.messageTimestamp,
+          pushName: msg.pushName || null
+        },
+        customerName: msg.pushName || null
       });
 
     } catch (err) {

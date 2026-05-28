@@ -42,6 +42,27 @@ describe("operations dashboard contract", () => {
               { id: 1, key: "new", name: "Novo", leads: [{ id: 11 }] }
             ]
           };
+        },
+        async listSellerActions() {
+          return [
+            {
+              id: 20,
+              status: "pending",
+              priority: "urgent",
+              source: "ai_whatsapp",
+              title: "Confirmar disponibilidade"
+            }
+          ];
+        },
+        async listHumanRequiredLeads() {
+          return [
+            {
+              id: 11,
+              status: "human_required",
+              lead_score: 88,
+              seller_action_id: 20
+            }
+          ];
         }
       }
     );
@@ -50,6 +71,13 @@ describe("operations dashboard contract", () => {
     assert.strictEqual(result.intelligence.actions.length, 1);
     assert.strictEqual(result.inbox.summary.unread, 3);
     assert.strictEqual(result.inbox.summary.unassigned, 1);
+    assert.strictEqual(result.whatsapp_ai.human_required_leads.length, 1);
+    assert.strictEqual(result.whatsapp_ai.seller_actions.length, 1);
+    assert.ok(
+      result.summary_cards.some(
+        (card) => card.key === "whatsapp_hot_leads" && card.value === 1
+      )
+    );
     assert.strictEqual(result.pipeline.summary.open_leads, 4);
     assert.ok(
       result.summary_cards.some(
@@ -70,14 +98,22 @@ describe("operations dashboard contract", () => {
         },
         async getPipeline() {
           throw new Error("relation pipeline_stages does not exist");
+        },
+        async listSellerActions() {
+          throw new Error("relation seller_actions does not exist");
+        },
+        async listHumanRequiredLeads() {
+          throw new Error("relation leads does not exist");
         }
       }
     );
 
     assert.strictEqual(result.status, "partial");
-    assert.strictEqual(result.section_errors.length, 3);
+    assert.strictEqual(result.section_errors.length, 5);
     assert.deepStrictEqual(result.intelligence.actions, []);
     assert.deepStrictEqual(result.inbox.conversations, []);
+    assert.deepStrictEqual(result.whatsapp_ai.seller_actions, []);
+    assert.deepStrictEqual(result.whatsapp_ai.human_required_leads, []);
     assert.deepStrictEqual(result.pipeline.stages, []);
     assert.strictEqual(result.pipeline.summary.open_leads, 0);
   });

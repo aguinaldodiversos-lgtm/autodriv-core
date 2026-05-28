@@ -33,9 +33,11 @@ async function create(vehicle) {
       license_plate, version, color, fuel, transmission, mileage, price,
       fipe_price, status, is_featured, slug, seo_title, seo_description,
       purchase_price, acquisition_cost, acquisition_source, preparation_status,
-      preparation_cost_estimate, preparation_cost_actual, notes, repair_notes,
-      preparation_items, ad_quality_score, ad_status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32::jsonb,$33,$34)
+      preparation_cost_estimate, preparation_cost_actual, notes, ad_description,
+      repair_notes, preparation_items, documentation_status, documentation_notes,
+      legal_restriction_status, documentation_cost, transport_cost, commission_cost,
+      other_costs, price_strategy, ad_quality_score, ad_status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33::jsonb,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43)
      RETURNING *`,
     [
       vehicle.dealership_id,
@@ -68,8 +70,17 @@ async function create(vehicle) {
       vehicle.preparation_cost_estimate,
       vehicle.preparation_cost_actual,
       vehicle.notes,
+      vehicle.ad_description,
       vehicle.repair_notes,
       JSON.stringify(vehicle.preparation_items || []),
+      vehicle.documentation_status,
+      vehicle.documentation_notes,
+      vehicle.legal_restriction_status,
+      vehicle.documentation_cost,
+      vehicle.transport_cost,
+      vehicle.commission_cost,
+      vehicle.other_costs,
+      vehicle.price_strategy,
       vehicle.ad_quality_score,
       vehicle.ad_status
     ]
@@ -132,12 +143,21 @@ async function update(id, dealershipId, vehicle) {
          preparation_cost_estimate = $27,
          preparation_cost_actual = $28,
          notes = $29,
-         repair_notes = $30,
-         preparation_items = $31::jsonb,
-         ad_quality_score = $32,
-         ad_status = $33
-     WHERE id = $34
-       AND dealership_id = $35
+         ad_description = $30,
+         repair_notes = $31,
+         preparation_items = $32::jsonb,
+         documentation_status = $33,
+         documentation_notes = $34,
+         legal_restriction_status = $35,
+         documentation_cost = $36,
+         transport_cost = $37,
+         commission_cost = $38,
+         other_costs = $39,
+         price_strategy = $40,
+         ad_quality_score = $41,
+         ad_status = $42
+     WHERE id = $43
+       AND dealership_id = $44
      RETURNING *`,
     [
       vehicle.title,
@@ -169,8 +189,17 @@ async function update(id, dealershipId, vehicle) {
       vehicle.preparation_cost_estimate,
       vehicle.preparation_cost_actual,
       vehicle.notes,
+      vehicle.ad_description,
       vehicle.repair_notes,
       JSON.stringify(vehicle.preparation_items || []),
+      vehicle.documentation_status,
+      vehicle.documentation_notes,
+      vehicle.legal_restriction_status,
+      vehicle.documentation_cost,
+      vehicle.transport_cost,
+      vehicle.commission_cost,
+      vehicle.other_costs,
+      vehicle.price_strategy,
       vehicle.ad_quality_score,
       vehicle.ad_status,
       id,

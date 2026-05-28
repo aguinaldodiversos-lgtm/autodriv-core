@@ -1,79 +1,47 @@
 const pool = require("../../config/db");
-const aiSeller = require("../ai_seller/aiSeller.service");
+const whatsappService = require("../whatsapp/whatsapp.service");
 
 function normalizePhone(jid) {
-  return jid.replace("@s.whatsapp.net", "");
+  return String(jid || "").replace("@s.whatsapp.net", "");
 }
 
 async function sendMessage(sock, jid, text) {
+  if (!text) return;
   await sock.sendMessage(jid, { text });
 }
 
-async function handleIncomingMessage(sock, jid, text) {
-  const phone = normalizePhone(jid);
+async function resolveDealershipId(phone) {
+  const configured = Number(process.env.WHATSAPP_DEALERSHIP_ID || 0);
+  if (Number.isFinite(configured) && configured > 0) return configured;
 
-  console.log("📩 Mensagem recebida:", phone, text);
-
-  /* =========================
-     IDENTIFICA INSTÂNCIA
-  ========================== */
-  const instanceResult = await pool.query(
-    `SELECT * FROM whatsapp_instances
+  const { rows } = await pool.query(
+    `SELECT dealership_id
+     FROM whatsapp_instances
      WHERE phone_number = $1
      LIMIT 1`,
     [phone]
   );
+  return rows[0]?.dealership_id || null;
+}
 
-  const instance = instanceResult.rows[0];
-
-  if (!instance) {
-    console.log("⚠️ Número não vinculado a nenhuma loja:", phone);
+async function handleIncomingMessage(sock, jid, text, options = {}) {
+  const phone = normalizePhone(jid);
+  const dealershipId = await resolveDealershipId(phone);
+  if (!dealershipId) {
+    console.warn("[whatsapp] Mensagem recebida sem loja vinculada");
     return;
   }
 
-  const dealershipId = instance.dealership_id;
-
-  /* =========================
-     BUSCA LEAD
-  ========================== */
-  let result = await pool.query(
-    `SELECT * FROM leads
-     WHERE phone = $1
-     AND dealership_id = $2`,
-    [phone, dealershipId]
-  );
-
-  let lead = result.rows[0];
-
-  /* =========================
-     CRIA LEAD SE NÃO EXISTIR
-  ========================== */
-  if (!lead) {
-    const insert = await pool.query(
-      `INSERT INTO leads
-       (dealership_id, name, phone, source, status)
-       VALUES ($1, 'Lead WhatsApp', $2, 'whatsapp', 'new')
-       RETURNING *`,
-      [dealershipId, phone]
-    );
-
-    lead = insert.rows[0];
-    console.log("🆕 Lead criado:", lead.id);
-  }
-
-  /* =========================
-     ENVIA PARA IA
-  ========================== */
-  const resultAI = await aiSeller.handleMessage(lead.id, text, [], {
-    dealershipId
+  await whatsappService.handleIncomingMessage({
+    dealershipId,
+    phone,
+    text,
+    providerMessageId: options.providerMessageId || null,
+    messageType: options.messageType || "text",
+    rawPayload: { legacy_handler: true, ...(options.rawPayload || {}) },
+    customerName: options.customerName || null,
+    sendMessage: (reply) => sendMessage(sock, jid, reply)
   });
-
-  /* =========================
-     RESPONDE NO WHATSAPP
-  ========================== */
-  await sendMessage(sock, jid, resultAI.reply);
-
-  console.log("🤖 Resposta enviada:", resultAI.reply);
 }
 
 module.exports = {

@@ -54,6 +54,7 @@ const migrations = [
   require("./migrations/047_whatsapp_ai_pre_attendance"),
   require("./migrations/048_seller_action_outcomes"),
   require("./migrations/049_ad_preparation_module"),
+  require("./migrations/050_external_publication_channels"),
 ];
 
 const path = require("path");

@@ -80,7 +80,8 @@ O backend bloqueia publicacao quando faltar:
 - ausencia de restricao legal critica.
 
 O guard tambem protege a publicacao externa existente em
-`POST /api/integrations/carros-na-cidade/:vehicleId`, evitando que um portal
+`POST /api/integrations/carros-na-cidade/:vehicleId` e a rota generica
+`POST /api/integrations/:channel/:vehicleId`, evitando que Instagram ou portal
 receba veiculo incompleto por uma rota lateral.
 
 Erro esperado:

@@ -209,26 +209,40 @@ describe("services: user.dealership_id e user.id", () => {
     ));
     const repo = require(path.join("..", "src", "modules", "integrations", "integrations.repository"));
     const adPreparation = require(path.join("..", "src", "modules", "ad_preparation", "adPreparation.service"));
-    const oPub = cnc.publishVehicle;
-    const oCreate = repo.create;
-    const oAssertCanPublish = adPreparation.assertCanPublish;
+    const oPub = cnc.publish;
+    const oCreateAttempt = repo.createAttempt;
+    const oMarkAttemptPublished = repo.markAttemptPublished;
+    const oEvaluate = adPreparation.evaluate;
     const oQ = pool.query;
     let vehicleParams;
     let readinessParams;
-    cnc.publishVehicle = async () => ({ id: "ext-1" });
-    adPreparation.assertCanPublish = async (vehicleId, currentUser) => {
+    cnc.publish = async () => ({ id: "ext-1", status: "published" });
+    adPreparation.evaluate = async (vehicleId, currentUser) => {
       readinessParams = [vehicleId, currentUser.dealership_id];
-      return { canPublish: true };
+      return {
+        canPublish: true,
+        score: 90,
+        grade: "excellent",
+        blockingReasons: [],
+        warnings: [],
+        breakdown: {}
+      };
     };
     let created;
-    repo.create = async (row) => {
+    repo.createAttempt = async (row) => {
       created = row;
       return { id: 1, ...row };
     };
+    repo.markAttemptPublished = async (id, dealershipId, data) => ({
+      id,
+      dealership_id: dealershipId,
+      ...created,
+      ...data
+    });
     pool.query = async (sql, params) => {
       if (String(sql).includes("FROM vehicles") && String(sql).includes("dealership_id = $2")) {
         vehicleParams = params;
-        return { rows: [{ id: 1, brand: "A", model: "B", year: 2020, price: 1000 }] };
+        return { rows: [{ id: 1, dealership_id: 101, brand: "A", model: "B", year: 2020, price: 1000 }] };
       }
       if (String(sql).includes("vehicle_images")) {
         return { rows: [] };
@@ -240,10 +254,69 @@ describe("services: user.dealership_id e user.id", () => {
       assert.deepStrictEqual(readinessParams, [1, 101]);
       assert.deepStrictEqual(vehicleParams, [1, 101]);
       assert.strictEqual(created.dealership_id, 101);
+      assert.strictEqual(created.status, "pending");
+      assert.strictEqual(created.platform, "carros_na_cidade");
+      assert.strictEqual(created.payload.readiness.can_publish, true);
     } finally {
-      cnc.publishVehicle = oPub;
-      repo.create = oCreate;
-      adPreparation.assertCanPublish = oAssertCanPublish;
+      cnc.publish = oPub;
+      repo.createAttempt = oCreateAttempt;
+      repo.markAttemptPublished = oMarkAttemptPublished;
+      adPreparation.evaluate = oEvaluate;
+      pool.query = oQ;
+    }
+  });
+
+  test("integrations.publishToChannel bloqueia anuncio incompleto antes de enviar ao canal", async () => {
+    const service = require(path.join("..", "src", "modules", "integrations", "integrations.service"));
+    const instagram = require(path.join("..", "src", "modules", "integrations", "adapters", "instagram.adapter"));
+    const repo = require(path.join("..", "src", "modules", "integrations", "integrations.repository"));
+    const adPreparation = require(path.join("..", "src", "modules", "ad_preparation", "adPreparation.service"));
+    const oPublish = instagram.publish;
+    const oCreateAttempt = repo.createAttempt;
+    const oEvaluate = adPreparation.evaluate;
+    const oQ = pool.query;
+    let calledPublish = false;
+    let blockedAttempt;
+
+    instagram.publish = async () => {
+      calledPublish = true;
+      return { status: "published" };
+    };
+    adPreparation.evaluate = async () => ({
+      canPublish: false,
+      score: 42,
+      grade: "incomplete",
+      blockingReasons: [{ key: "minimum_photos_count" }],
+      warnings: [],
+      breakdown: {}
+    });
+    repo.createAttempt = async (row) => {
+      blockedAttempt = row;
+      return { id: 2, ...row };
+    };
+    pool.query = async (sql, params) => {
+      if (String(sql).includes("FROM vehicles") && String(sql).includes("dealership_id = $2")) {
+        return { rows: [{ id: 1, dealership_id: params[1], brand: "A", model: "B", price: 1000 }] };
+      }
+      if (String(sql).includes("vehicle_images")) {
+        return { rows: [] };
+      }
+      return oQ(sql, params);
+    };
+
+    try {
+      await assert.rejects(
+        () => service.publishToChannel(1, user(101), "instagram"),
+        (err) => err.payload?.error === "AD_NOT_READY_TO_PUBLISH"
+      );
+      assert.strictEqual(calledPublish, false);
+      assert.strictEqual(blockedAttempt.status, "blocked");
+      assert.strictEqual(blockedAttempt.platform, "instagram");
+      assert.strictEqual(blockedAttempt.payload.readiness.can_publish, false);
+    } finally {
+      instagram.publish = oPublish;
+      repo.createAttempt = oCreateAttempt;
+      adPreparation.evaluate = oEvaluate;
       pool.query = oQ;
     }
   });

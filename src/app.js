@@ -239,6 +239,7 @@ const mountRoutes = [
   ["/api/clients", require("./modules/clients/clients.routes")],
   ["/api/finance", require("./modules/finance/finance.routes")],
   ["/api/fipe", require("./modules/fipe/fipe.routes")],
+  ["/api/trade-appraisals", require("./modules/trade_appraisals/tradeAppraisals.routes")],
   ["/api/proposals", require("./modules/proposals/proposals.routes")],
   ["/api/vehicles", require("./modules/ad_preparation/adPreparation.routes")],
   ["/api/tasks", require("./modules/tasks/tasks.routes")],

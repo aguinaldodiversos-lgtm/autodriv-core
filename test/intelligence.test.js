@@ -87,6 +87,40 @@ describe("intelligence daily actions", () => {
               title: "Civic 2020",
               price: 90000,
               fipe_price: 80000,
+              purchase_price: 65000,
+              acquisition_cost: 0,
+              preparation_cost_actual: 0,
+              preparation_cost_estimate: 0,
+              documentation_cost: 0,
+              transport_cost: 0,
+              commission_cost: 0,
+              other_costs: 0,
+              preparation_status: "pending",
+              ad_quality_score: 42,
+              ad_status: "draft",
+              preparation_score: 42,
+              preparation_can_publish: false,
+              preparation_grade: "incomplete",
+              preparation_blocking_reasons: [
+                {
+                  key: "minimum_photos_count",
+                  category: "photos",
+                  message: "Adicione pelo menos 4 fotos para publicar."
+                }
+              ],
+              preparation_warnings: [],
+              preparation_breakdown: { photos: 0, fipeAndPrice: 12 },
+              blocking_checks: [
+                {
+                  check_key: "minimum_photos_count",
+                  category: "photos",
+                  message: "Adicione pelo menos 4 fotos para publicar.",
+                  action_hint: "Enviar fotos do veiculo"
+                }
+              ],
+              image_count: 0,
+              has_main_image: false,
+              pending_preparation_tasks: 1,
               days_in_stock: 75
             }
           ]
@@ -130,7 +164,13 @@ describe("intelligence daily actions", () => {
           suggested_action: params[8],
           evidence: JSON.parse(params[9]),
           explanation: params[10],
-          status: "pending"
+          status: "pending",
+          impact_area: params[11],
+          impact_label: params[12],
+          impact_estimate: params[13],
+          urgency_label: params[14],
+          expected_outcome: params[15],
+          recommended_channel: params[16]
         };
         upserts.push(row);
         listed = upserts;
@@ -151,6 +191,21 @@ describe("intelligence daily actions", () => {
     assert.ok(res.body.summary.total_actions >= 4);
     assert.ok(res.body.actions.some((a) => a.type === "lead_followup"));
     assert.ok(res.body.actions.some((a) => a.type === "price_adjustment"));
+    assert.ok(
+      res.body.actions.some(
+        (a) =>
+          a.action_key === "vehicle:20:fix-ad-readiness-today" &&
+          a.suggested_action.includes("Corrigir hoje") &&
+          a.evidence.missing_categories.includes("fotos")
+      )
+    );
+    assert.ok(
+      res.body.actions.some(
+        (a) =>
+          a.action_key === "vehicle:20:aging-stock-good-margin-priority" &&
+          a.expected_outcome === "sale"
+      )
+    );
     assert.ok(res.body.actions.every((a) => a.explanation));
     assert.strictEqual(upserts[0].dealership_id, 7);
   });

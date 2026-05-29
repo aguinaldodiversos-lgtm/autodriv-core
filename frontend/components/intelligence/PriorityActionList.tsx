@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/utils/formatters";
 export type PriorityAction = {
   id: number;
   type: string;
+  entity_type?: string | null;
   reason: string;
   suggested_action: string;
   priority_score?: number;
@@ -17,6 +18,7 @@ export type PriorityAction = {
   impact_estimate?: number | string | null;
   expected_outcome?: string | null;
   recommended_channel?: string | null;
+  evidence?: Record<string, unknown> | null;
 };
 
 const areaLabels: Record<string, string> = {
@@ -66,6 +68,19 @@ function impactText(action: PriorityAction) {
   return formatCurrency(value);
 }
 
+function vehicleContext(action: PriorityAction) {
+  if (action.entity_type !== "vehicle" || !action.evidence) return null;
+  const title = action.evidence.title;
+  const missing = action.evidence.missing_categories;
+
+  return {
+    title: typeof title === "string" ? title : null,
+    missing: Array.isArray(missing)
+      ? missing.map((item) => String(item)).filter(Boolean)
+      : []
+  };
+}
+
 export function PriorityActionList({
   actions,
   title = "Acoes de maior impacto hoje",
@@ -95,7 +110,10 @@ export function PriorityActionList({
         {visibleActions.length === 0 ? (
           <p className="text-sm text-slate-500">{emptyText}</p>
         ) : (
-          visibleActions.map((action, index) => (
+          visibleActions.map((action, index) => {
+            const context = vehicleContext(action);
+
+            return (
             <div key={action.id} className="rounded-lg border border-slate-100 p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
@@ -110,7 +128,19 @@ export function PriorityActionList({
                     <Badge variant="info">{outcomeLabel(action.expected_outcome)}</Badge>
                   </div>
                   <p className="mt-3 text-sm font-semibold text-slate-950">{action.suggested_action}</p>
+                  {context?.title ? (
+                    <p className="mt-1 text-xs font-medium text-slate-700">
+                      Veiculo: {context.title}
+                    </p>
+                  ) : null}
                   <p className="mt-1 text-sm text-slate-500">{action.explanation || action.reason}</p>
+                  {context?.missing.length ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {context.missing.map((item) => (
+                        <Badge key={item} variant="warning">{item}</Badge>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
                     <span>Impacto: <strong className="text-slate-800">{impactText(action)}</strong></span>
                     <span>Canal: <strong className="text-slate-800">{action.recommended_channel || "crm"}</strong></span>
@@ -134,7 +164,7 @@ export function PriorityActionList({
                       disabled={decidingId === action.id}
                       onClick={() => onDecision(action, "accepted")}
                     >
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Executar
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Aceitar
                     </Button>
                   </div>
                 ) : (
@@ -142,7 +172,8 @@ export function PriorityActionList({
                 )}
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </CardContent>
     </Card>

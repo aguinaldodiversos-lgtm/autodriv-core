@@ -23,6 +23,7 @@ export type IntelligenceAction = {
   urgency_label?: string | null;
   expected_outcome?: string | null;
   recommended_channel?: string | null;
+  evidence?: Record<string, unknown> | null;
 };
 
 export type InboxConversation = {

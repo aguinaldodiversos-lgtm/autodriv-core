@@ -158,6 +158,84 @@ function daysUntil(value) {
   return Math.ceil((at - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
+function asArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function asObject(value) {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function adPreparationScore(vehicle, fallbackScore) {
+  const score = Number(vehicle.preparation_score);
+  if (Number.isFinite(score) && score > 0) return score;
+  return Number(fallbackScore || 0);
+}
+
+function criticalAdGaps(vehicle, signals) {
+  const blockingChecks = asArray(vehicle.blocking_checks);
+  const keys = new Set(blockingChecks.map((item) => item.check_key || item.key));
+  const categories = new Set(blockingChecks.map((item) => item.category));
+  const gaps = [];
+
+  if (
+    categories.has("photos") ||
+    keys.has("main_photo_present") ||
+    keys.has("minimum_photos_count") ||
+    !signals.checklist.has_main_photo ||
+    !signals.checklist.has_minimum_photos
+  ) {
+    gaps.push("fotos");
+  }
+
+  if (
+    categories.has("fipeAndPrice") ||
+    keys.has("fipe_code_present") ||
+    keys.has("fipe_value_present") ||
+    !signals.checklist.has_fipe_reference
+  ) {
+    gaps.push("FIPE");
+  }
+
+  if (keys.has("sale_price_present") || Number(vehicle.price || 0) <= 0) {
+    gaps.push("preco");
+  }
+
+  if (categories.has("margin") || !signals.checklist.has_healthy_margin) {
+    gaps.push("margem");
+  }
+
+  if (categories.has("preparation") || vehicle.preparation_status !== "done") {
+    gaps.push("preparacao");
+  }
+
+  if (categories.has("documentation")) {
+    gaps.push("documentacao");
+  }
+
+  return [...new Set(gaps)];
+}
+
 async function leadActions(dealershipId) {
   const { rows } = await pool.query(
     `SELECT
@@ -275,9 +353,30 @@ async function stockActions(dealershipId) {
         vehicles.acquisition_cost,
         vehicles.preparation_cost_actual,
         vehicles.preparation_cost_estimate,
+        vehicles.documentation_cost,
+        vehicles.transport_cost,
+        vehicles.commission_cost,
+        vehicles.other_costs,
         vehicles.preparation_status,
         vehicles.ad_quality_score,
         vehicles.ad_status,
+        aps.score AS preparation_score,
+        aps.can_publish AS preparation_can_publish,
+        aps.grade AS preparation_grade,
+        aps.blocking_reasons AS preparation_blocking_reasons,
+        aps.warnings AS preparation_warnings,
+        aps.breakdown AS preparation_breakdown,
+        COALESCE(
+          jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'check_key', apc.check_key,
+              'category', apc.category,
+              'message', apc.message,
+              'action_hint', apc.action_hint
+            )
+          ) FILTER (WHERE apc.id IS NOT NULL),
+          '[]'::jsonb
+        ) AS blocking_checks,
         COUNT(DISTINCT vi.id)::int AS image_count,
         BOOL_OR(COALESCE(vi.is_main, false) OR COALESCE(vi.is_cover, false)) AS has_main_image,
         COUNT(DISTINCT vpt.id) FILTER (WHERE vpt.status <> 'done')::int AS pending_preparation_tasks,
@@ -287,9 +386,17 @@ async function stockActions(dealershipId) {
      FROM vehicles
      LEFT JOIN vehicle_images vi ON vi.vehicle_id = vehicles.id
      LEFT JOIN vehicle_preparation_tasks vpt ON vpt.vehicle_id = vehicles.id
+     LEFT JOIN ad_preparation_scores aps
+       ON aps.vehicle_id = vehicles.id
+      AND aps.dealership_id = vehicles.dealership_id
+     LEFT JOIN ad_preparation_checks apc
+       ON apc.vehicle_id = vehicles.id
+      AND apc.dealership_id = vehicles.dealership_id
+      AND apc.required = TRUE
+      AND apc.status IN ('blocked', 'missing')
      WHERE vehicles.dealership_id = $1
        AND vehicles.status = 'available'
-     GROUP BY vehicles.id
+     GROUP BY vehicles.id, aps.id
      ORDER BY COALESCE(vehicles.entry_date, vehicles.created_at) ASC
      LIMIT 50`,
     [dealershipId]
@@ -305,13 +412,41 @@ async function stockActions(dealershipId) {
     const totalCost =
       purchase +
       Number(vehicle.acquisition_cost || 0) +
-      Math.max(
-        Number(vehicle.preparation_cost_actual || 0),
-        Number(vehicle.preparation_cost_estimate || 0)
-      );
+      Math.max(Number(vehicle.preparation_cost_actual || 0), Number(vehicle.preparation_cost_estimate || 0)) +
+      Number(vehicle.documentation_cost || 0) +
+      Number(vehicle.transport_cost || 0) +
+      Number(vehicle.commission_cost || 0) +
+      Number(vehicle.other_costs || 0);
     const fipeDiff = fipe > 0 ? ((price - fipe) / fipe) * 100 : null;
     const projectedMargin = price > 0 && totalCost > 0 ? price - totalCost : null;
-    const adQuality = Number(signals.ad_quality_score || vehicle.ad_quality_score || 0);
+    const marginPercent = projectedMargin != null && price > 0 ? (projectedMargin / price) * 100 : null;
+    const adQuality = adPreparationScore(vehicle, signals.ad_quality_score || vehicle.ad_quality_score);
+    const gaps = criticalAdGaps(vehicle, signals);
+    const preparationCanPublish = vehicle.preparation_can_publish;
+
+    if (gaps.length > 0) {
+      actions.push(
+        action({
+          key: `vehicle:${vehicle.id}:fix-ad-readiness-today`,
+          type: "ad_quality",
+          entityType: "vehicle",
+          entityId: vehicle.id,
+          score: gaps.includes("fotos") || gaps.includes("preco") || gaps.includes("FIPE") ? 88 : 76,
+          reason: `Veiculo com pendencias para anuncio: ${gaps.join(", ")}`,
+          suggestedAction: `Corrigir hoje: ${gaps.join(", ")}`,
+          impactEstimate: price > 0 ? price * 0.025 : null,
+          evidence: {
+            vehicle_id: vehicle.id,
+            title: vehicle.title,
+            missing_categories: gaps,
+            ad_quality_score: adQuality,
+            can_publish: preparationCanPublish === true,
+            blocking_checks: asArray(vehicle.blocking_checks),
+            preparation_breakdown: asObject(vehicle.preparation_breakdown)
+          }
+        })
+      );
+    }
 
     if (!signals.checklist.has_minimum_photos) {
       actions.push(
@@ -388,6 +523,35 @@ async function stockActions(dealershipId) {
       );
     }
 
+    if (days >= 45 && projectedMargin != null && marginPercent != null && marginPercent >= 8) {
+      actions.push(
+        action({
+          key: `vehicle:${vehicle.id}:aging-stock-good-margin-priority`,
+          type: "stock_action",
+          entityType: "vehicle",
+          entityId: vehicle.id,
+          score: Math.min(100, 76 + Math.floor(days / 5) + Math.min(10, Math.floor(marginPercent / 4))),
+          reason: `Carro parado ha ${days} dias com margem saudavel de ${marginPercent.toFixed(1)}%`,
+          suggestedAction: "Priorizar campanha e vendedor para girar este carro mantendo margem",
+          impactEstimate: projectedMargin,
+          impactArea: "stock",
+          impactLabel: "high",
+          expectedOutcome: "sale",
+          evidence: {
+            vehicle_id: vehicle.id,
+            title: vehicle.title,
+            days_in_stock: days,
+            price,
+            projected_cost: totalCost,
+            projected_margin: projectedMargin,
+            projected_margin_percent: Number(marginPercent.toFixed(1)),
+            ad_quality_score: adQuality,
+            can_publish: preparationCanPublish === true
+          }
+        })
+      );
+    }
+
     if (fipeDiff != null && fipeDiff >= 8) {
       actions.push(
         action({
@@ -432,22 +596,27 @@ async function stockActions(dealershipId) {
       );
     }
 
-    if (adQuality < 70) {
+    if (adQuality < 70 || preparationCanPublish === false) {
       actions.push(
         action({
           key: `vehicle:${vehicle.id}:bad-ad-quality`,
           type: "ad_quality",
           entityType: "vehicle",
           entityId: vehicle.id,
-          score: 74,
-          reason: `Anuncio com qualidade baixa (${adQuality}/100)`,
-          suggestedAction: "Melhorar fotos, descricao e dados obrigatorios do anuncio",
+          score: preparationCanPublish === false ? 82 : 74,
+          reason: preparationCanPublish === false
+            ? `Anuncio ainda nao publicavel (${adQuality}/100)`
+            : `Anuncio com qualidade baixa (${adQuality}/100)`,
+          suggestedAction: "Abrir preparacao do veiculo, corrigir checklist e recalcular score",
           impactEstimate: price > 0 ? price * 0.02 : null,
           evidence: {
             vehicle_id: vehicle.id,
             title: vehicle.title,
             ad_quality_score: adQuality,
-            ad_status: vehicle.ad_status
+            ad_status: vehicle.ad_status,
+            can_publish: preparationCanPublish === true,
+            blocking_reasons: asArray(vehicle.preparation_blocking_reasons),
+            warnings: asArray(vehicle.preparation_warnings)
           }
         })
       );

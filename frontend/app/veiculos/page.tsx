@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { AlertTriangle, Camera, CheckCircle2, FileText, ImagePlus, Pencil, Plus, RefreshCw, Send, Sparkles, Trash2, Wrench } from "lucide-react";
-import { createVeiculo, listVeiculos, updateVeiculo } from "@/lib/api/veiculos";
+import { createVeiculo, listVeiculos, listVehicleOperationalView, sellVeiculo, updateVeiculo } from "@/lib/api/veiculos";
 import { uploadVehicleImage } from "@/lib/api/images";
 import { getVehicleIntelligence, listStockIntelligence, upsertVehiclePreparationTask } from "@/lib/api/stock-intelligence";
 import { generateVehicleAd, listVehicleAds } from "@/lib/api/ads";
@@ -33,7 +33,7 @@ import type { PreparedAd } from "@/types/ad";
 import type { AdPreparationCheck, AdPreparationScore, AdPreparationSuggestion } from "@/types/ad-preparation";
 import type { FipeBrand, FipeModel, FipeValue, FipeYear } from "@/types/fipe";
 import type { StockVehicle, VehicleIntelligence, VehicleIntelligenceDetail, VehiclePreparationTask } from "@/types/stock-intelligence";
-import type { CreateVeiculoPayload, Veiculo } from "@/types/veiculo";
+import type { CreateVeiculoPayload, Veiculo, VehicleOperationalItem, VehicleOperationalResponse, VehicleOperationalView } from "@/types/veiculo";
 
 const currentYear = new Date().getFullYear();
 
@@ -90,6 +90,12 @@ const initialPreparationTaskForm = {
 
 type PreparationTaskForm = typeof initialPreparationTaskForm;
 
+const initialSellForm = {
+  sold_price: "",
+  sold_at: new Date().toISOString().slice(0, 10),
+  notes: ""
+};
+
 function toNumberOrNull(value: string) {
   if (!value.trim()) return null;
   const normalized = value.replace(/\./g, "").replace(",", ".");
@@ -104,22 +110,6 @@ function numberValue(value: number | string | null | undefined) {
 
 function buildVehicleName(veiculo: Veiculo) {
   return veiculo.title || [veiculo.brand, veiculo.model, veiculo.version, veiculo.year].filter(Boolean).join(" ") || "Veiculo sem nome";
-}
-
-function getTotalCost(veiculo: Veiculo) {
-  return (
-    numberValue(veiculo.purchase_price) +
-    numberValue(veiculo.acquisition_cost) +
-    numberValue(veiculo.preparation_cost_actual) +
-    numberValue(veiculo.documentation_cost) +
-    numberValue(veiculo.transport_cost) +
-    numberValue(veiculo.commission_cost) +
-    numberValue(veiculo.other_costs)
-  );
-}
-
-function getExpectedMargin(veiculo: Veiculo) {
-  return numberValue(veiculo.price) - getTotalCost(veiculo);
 }
 
 function preparationItemsToText(items: Veiculo["preparation_items"]) {
@@ -247,6 +237,86 @@ function checkStatusLabel(status: AdPreparationCheck["status"]) {
   return labels[status] || status;
 }
 
+const vehicleViewTabs: Array<{ id: VehicleOperationalView; label: string; emptyTitle: string; emptyDescription: string }> = [
+  {
+    id: "stock",
+    label: "Estoque",
+    emptyTitle: "Nenhum veiculo cadastrado",
+    emptyDescription: "Cadastre o primeiro veiculo para começar a controlar estoque, margem e qualidade do anuncio."
+  },
+  {
+    id: "showroom",
+    label: "Showroom",
+    emptyTitle: "Nenhum veiculo pronto para venda",
+    emptyDescription: "Finalize fotos, FIPE, preço, margem e preparação para liberar veiculos no showroom."
+  },
+  {
+    id: "preparation",
+    label: "Preparacao",
+    emptyTitle: "Nenhum veiculo em preparação",
+    emptyDescription: "Quando houver pendencias de fotos, FIPE, preço, margem ou documentação, elas aparecerão aqui."
+  },
+  {
+    id: "sold-month",
+    label: "Vendidos no mes",
+    emptyTitle: "Nenhum veiculo vendido neste mes",
+    emptyDescription: "As vendas do mês aparecerão com valor, margem, vendedor e dias em estoque."
+  }
+];
+
+const sortOptions = [
+  { value: "priority_desc", label: "Prioridade" },
+  { value: "days_in_stock_desc", label: "Mais tempo em estoque" },
+  { value: "score_asc", label: "Menor score" },
+  { value: "score_desc", label: "Maior score" },
+  { value: "margin_desc", label: "Maior margem" },
+  { value: "price_asc", label: "Menor preço" },
+  { value: "price_desc", label: "Maior preço" },
+  { value: "sold_at_desc", label: "Venda mais recente" },
+  { value: "newest", label: "Mais recentes" }
+];
+
+function formatPercent(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "Nao calculada";
+  return `${Number(value).toFixed(1)}%`;
+}
+
+function operationalStatusLabel(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    available: "Em estoque",
+    published: "Publicado",
+    draft: "Rascunho",
+    ready_to_publish: "Pronto",
+    blocked_incomplete: "Bloqueado",
+    paused: "Pausado",
+    sold: "Vendido",
+    preparation: "Preparacao",
+    not_started: "Nao iniciada",
+    in_progress: "Em andamento",
+    done: "Concluida"
+  };
+  return labels[String(value || "")] || value || "Nao informado";
+}
+
+function recommendationTone(type: string): "slate" | "blue" | "green" | "amber" | "red" {
+  if (type === "margin_risk") return "red";
+  if (type === "fix_today" || type === "delayed_preparation" || type === "stagnant_stock") return "amber";
+  if (type === "publish_now" || type === "prioritize_sale") return "green";
+  if (type === "sold_result") return "blue";
+  return "slate";
+}
+
+function marginTone(value: number | null | undefined): "slate" | "green" | "amber" | "red" {
+  if (value === null || value === undefined) return "slate";
+  if (value < 0) return "red";
+  if (value < 5) return "amber";
+  return "green";
+}
+
+function itemTitle(item: VehicleOperationalItem) {
+  return [item.brand, item.model, item.version, item.year].filter(Boolean).join(" ") || `Veiculo #${item.id}`;
+}
+
 function categoryLabel(category: string) {
   const labels: Record<string, string> = {
     photos: "Fotos",
@@ -295,6 +365,12 @@ function indexStockInsights(items: StockVehicle[]) {
 export default function VeiculosPage() {
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [query, setQuery] = useState("");
+  const [activeView, setActiveView] = useState<VehicleOperationalView>("stock");
+  const [sort, setSort] = useState("priority_desc");
+  const [minScore, setMinScore] = useState("");
+  const [operationalPanel, setOperationalPanel] = useState<VehicleOperationalResponse | null>(null);
+  const [operationalLoading, setOperationalLoading] = useState(true);
+  const [operationalError, setOperationalError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -324,6 +400,10 @@ export default function VeiculosPage() {
   const [isPreparationLoading, setIsPreparationLoading] = useState(false);
   const [preparationAction, setPreparationAction] = useState<string | null>(null);
   const [publishNotice, setPublishNotice] = useState<string | null>(null);
+  const [sellTarget, setSellTarget] = useState<VehicleOperationalItem | null>(null);
+  const [sellForm, setSellForm] = useState(initialSellForm);
+  const [sellError, setSellError] = useState<string | null>(null);
+  const [isSelling, setIsSelling] = useState(false);
 
   useEffect(() => {
     Promise.allSettled([listVeiculos(), listStockIntelligence()])
@@ -341,6 +421,34 @@ export default function VeiculosPage() {
       .catch((err) => setError(err instanceof Error ? err.message : "Erro ao carregar veiculos."))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setOperationalLoading(true);
+    setOperationalError(null);
+    listVehicleOperationalView({
+      view: activeView,
+      search: query,
+      minScore,
+      sort,
+      page: 1,
+      limit: 40
+    })
+      .then((panel) => {
+        if (!cancelled) setOperationalPanel(panel);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setOperationalError(err instanceof Error ? err.message : "Nao foi possivel carregar os veiculos agora.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setOperationalLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView, minScore, query, sort]);
 
   useEffect(() => {
     if (!isModalOpen || fipeBrands.length > 0) return;
@@ -401,28 +509,6 @@ export default function VeiculosPage() {
       return acc;
     }, {});
   }, [adPreparation]);
-
-  const filtered = useMemo(() => {
-    const term = query.toLowerCase();
-    return veiculos.filter((veiculo) =>
-      [veiculo.title, veiculo.brand, veiculo.model, veiculo.version, veiculo.license_plate, veiculo.status, veiculo.ad_status]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(term))
-    );
-  }, [veiculos, query]);
-
-  const metrics = useMemo(() => {
-    const totalValue = veiculos.reduce((sum, veiculo) => sum + numberValue(veiculo.price), 0);
-    const totalCost = veiculos.reduce((sum, veiculo) => sum + getTotalCost(veiculo), 0);
-    const available = veiculos.filter((veiculo) => veiculo.status !== "sold").length;
-
-    return {
-      total: veiculos.length,
-      available,
-      totalValue,
-      expectedMargin: totalValue - totalCost
-    };
-  }, [veiculos]);
 
   function updateField(field: keyof VehicleForm, value: string) {
     setForm((current) => {
@@ -581,6 +667,18 @@ export default function VeiculosPage() {
     setStockInsights(indexStockInsights(stock));
   }
 
+  async function refreshOperationalPanel() {
+    const panel = await listVehicleOperationalView({
+      view: activeView,
+      search: query,
+      minScore,
+      sort,
+      page: operationalPanel?.pagination.page || 1,
+      limit: operationalPanel?.pagination.limit || 40
+    });
+    setOperationalPanel(panel);
+  }
+
   async function loadVehicleDetail(vehicleId: number) {
     setIsDetailLoading(true);
     try {
@@ -661,6 +759,7 @@ export default function VeiculosPage() {
       }));
       const refreshed = await listVeiculos();
       setVeiculos(refreshed);
+      await refreshOperationalPanel();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Nao foi possivel recalcular o checklist.");
     } finally {
@@ -707,10 +806,73 @@ export default function VeiculosPage() {
       }));
       const refreshed = await listVeiculos();
       setVeiculos(refreshed);
+      await refreshOperationalPanel();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Nao foi possivel publicar o veiculo.");
     } finally {
       setPreparationAction(null);
+    }
+  }
+
+  async function publishPanelVehicle(vehicleId: number) {
+    setPreparationAction(`publish:${vehicleId}`);
+    setOperationalError(null);
+    try {
+      await publishVehicle(vehicleId);
+      const refreshed = await listVeiculos();
+      setVeiculos(refreshed);
+      await refreshOperationalPanel();
+    } catch (err) {
+      setOperationalError(err instanceof Error ? err.message : "Nao foi possivel publicar o veiculo.");
+    } finally {
+      setPreparationAction(null);
+    }
+  }
+
+  function openSellModal(item: VehicleOperationalItem) {
+    setSellTarget(item);
+    setSellForm({
+      sold_price: item.price ? String(item.price) : "",
+      sold_at: new Date().toISOString().slice(0, 10),
+      notes: ""
+    });
+    setSellError(null);
+  }
+
+  function closeSellModal() {
+    if (isSelling) return;
+    setSellTarget(null);
+    setSellForm(initialSellForm);
+    setSellError(null);
+  }
+
+  async function submitSellVehicle(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!sellTarget) return;
+    const soldPrice = toNumberOrNull(sellForm.sold_price);
+    if (!soldPrice || soldPrice <= 0) {
+      setSellError("Informe um valor de venda maior que zero.");
+      return;
+    }
+    setIsSelling(true);
+    setSellError(null);
+    try {
+      await sellVeiculo(sellTarget.id, {
+        sold_price: soldPrice,
+        sold_at: sellForm.sold_at || null,
+        notes: sellForm.notes.trim() || null
+      });
+      const refreshed = await listVeiculos();
+      setVeiculos(refreshed);
+      await refreshOperationalPanel();
+      setSellTarget(null);
+      setSellForm(initialSellForm);
+      setActiveView("sold-month");
+      setSort("sold_at_desc");
+    } catch (err) {
+      setSellError(err instanceof Error ? err.message : "Nao foi possivel marcar o veiculo como vendido.");
+    } finally {
+      setIsSelling(false);
     }
   }
 
@@ -790,6 +952,7 @@ export default function VeiculosPage() {
       const refreshed = await listVeiculos();
       setVeiculos(refreshed);
       await refreshStockInsights();
+      await refreshOperationalPanel();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Nao foi possivel salvar a etapa de preparacao.");
     } finally {
@@ -892,6 +1055,7 @@ export default function VeiculosPage() {
       const refreshed = await listVeiculos();
       setVeiculos(refreshed);
       await refreshStockInsights();
+      await refreshOperationalPanel();
       resetVehicleModal();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Nao foi possivel salvar o veiculo.");
@@ -905,7 +1069,7 @@ export default function VeiculosPage() {
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-950">Veiculos</h1>
-          <p className="mt-1 text-sm text-slate-500">Cadastro completo com FIPE, fotos, reparos, preparacao e margem.</p>
+          <p className="mt-1 text-sm text-slate-500">Acompanhe estoque, showroom, preparacao, vendidos do mes e prioridades comerciais.</p>
         </div>
         <PermissionGate permission="veiculos:create">
           <Button type="button" onClick={openCreateModal}>
@@ -915,69 +1079,153 @@ export default function VeiculosPage() {
       </div>
 
       <section className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card><CardContent><p className="text-sm text-slate-500">Total em estoque</p><p className="mt-2 text-2xl font-semibold text-slate-950">{metrics.total}</p></CardContent></Card>
-        <Card><CardContent><p className="text-sm text-slate-500">Disponiveis</p><p className="mt-2 text-2xl font-semibold text-slate-950">{metrics.available}</p></CardContent></Card>
-        <Card><CardContent><p className="text-sm text-slate-500">Valor anunciado</p><p className="mt-2 text-2xl font-semibold text-slate-950">{formatCurrency(metrics.totalValue)}</p></CardContent></Card>
-        <Card><CardContent><p className="text-sm text-slate-500">Margem prevista</p><p className="mt-2 text-2xl font-semibold text-slate-950">{formatCurrency(metrics.expectedMargin)}</p></CardContent></Card>
+        <Card><CardContent><p className="text-sm text-slate-500">Total em estoque</p><p className="mt-2 text-2xl font-semibold text-slate-950">{operationalPanel?.summary.stockCount ?? 0}</p></CardContent></Card>
+        <Card><CardContent><p className="text-sm text-slate-500">Showroom pronto</p><p className="mt-2 text-2xl font-semibold text-slate-950">{operationalPanel?.summary.showroomCount ?? 0}</p></CardContent></Card>
+        <Card><CardContent><p className="text-sm text-slate-500">Em preparacao</p><p className="mt-2 text-2xl font-semibold text-slate-950">{operationalPanel?.summary.preparationCount ?? 0}</p></CardContent></Card>
+        <Card><CardContent><p className="text-sm text-slate-500">Vendidos no mes</p><p className="mt-2 text-2xl font-semibold text-slate-950">{operationalPanel?.summary.soldMonthCount ?? 0}</p></CardContent></Card>
+        <Card><CardContent><p className="text-sm text-slate-500">Margem prevista</p><p className="mt-2 text-2xl font-semibold text-slate-950">{formatCurrency(operationalPanel?.summary.totalExpectedMargin ?? 0)}</p></CardContent></Card>
+        <Card><CardContent><p className="text-sm text-slate-500">Margem realizada no mes</p><p className="mt-2 text-2xl font-semibold text-slate-950">{formatCurrency(operationalPanel?.summary.totalRealizedMarginMonth ?? 0)}</p></CardContent></Card>
+        <Card><CardContent><p className="text-sm text-slate-500">Pendencias criticas</p><p className="mt-2 text-2xl font-semibold text-slate-950">{operationalPanel?.summary.blockedCount ?? 0}</p></CardContent></Card>
+        <Card><CardContent><p className="text-sm text-slate-500">Score medio</p><p className="mt-2 text-2xl font-semibold text-slate-950">{operationalPanel?.summary.averageScore ?? 0}/100</p></CardContent></Card>
       </section>
 
       <Card>
         <CardContent>
-          <Input placeholder="Buscar por modelo, marca, placa ou status" value={query} onChange={(event) => setQuery(event.target.value)} />
-          {loading ? <p className="mt-6 text-sm text-slate-500">Carregando estoque...</p> : null}
-          {error ? <div className="mt-6"><EmptyState title="Erro ao carregar estoque" description={error} /></div> : null}
-          {!loading && !error && filtered.length === 0 ? (
-            <div className="mt-6"><EmptyState title="Nenhum veiculo no estoque" description="Cadastre veiculos para medir giro, preco, reparos e margem." /></div>
-          ) : null}
-          {filtered.length > 0 ? (
+          <div className="flex flex-col gap-4">
+            <div className="flex gap-2 overflow-x-auto rounded-md bg-slate-100 p-1">
+              {vehicleViewTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveView(tab.id);
+                    setSort(tab.id === "sold-month" ? "sold_at_desc" : tab.id === "showroom" ? "priority_desc" : "days_in_stock_desc");
+                  }}
+                  className={`whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition ${activeView === tab.id ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_160px_auto]">
+              <Input placeholder="Buscar marca, modelo, placa ou status" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <select className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" value={sort} onChange={(event) => setSort(event.target.value)}>
+                {sortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <Input placeholder="Score minimo" value={minScore} onChange={(event) => setMinScore(event.target.value)} />
+              <Button type="button" variant="secondary" onClick={() => { setQuery(""); setMinScore(""); setSort(activeView === "sold-month" ? "sold_at_desc" : "priority_desc"); }}>
+                Limpar filtros
+              </Button>
+            </div>
+          </div>
+
+          {operationalLoading || loading ? <p className="mt-6 text-sm text-slate-500">Carregando veiculos...</p> : null}
+          {operationalError || error ? <div className="mt-6"><EmptyState title="Nao foi possivel carregar os veiculos" description={operationalError || error || "Tente novamente."} /></div> : null}
+          {!operationalLoading && !operationalError && operationalPanel?.data.length === 0 ? (
             <div className="mt-6">
+              <EmptyState
+                title={vehicleViewTabs.find((tab) => tab.id === activeView)?.emptyTitle || "Nenhum veiculo encontrado"}
+                description={vehicleViewTabs.find((tab) => tab.id === activeView)?.emptyDescription || "Ajuste filtros ou cadastre novos veiculos."}
+              />
+            </div>
+          ) : null}
+          {operationalPanel?.data.length ? (
+            <div className="mt-6 overflow-x-auto">
               <Table>
                 <thead>
                   <tr>
                     <Th>Veiculo</Th>
-                    <Th>Placa/KM</Th>
-                    <Th>Preco</Th>
-                    <Th>Custo total</Th>
+                    <Th>Preco/FIPE</Th>
                     <Th>Margem</Th>
                     <Th>Score</Th>
-                    <Th>Fotos</Th>
-                    <Th>Acao sugerida</Th>
+                    <Th>Pendencias</Th>
+                    <Th>Prioridade</Th>
+                    <Th>Dias</Th>
                     <Th>Status</Th>
                     <Th>Acoes</Th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((veiculo) => {
-                    const margin = getExpectedMargin(veiculo);
-                    const insight = stockInsights[veiculo.id];
-                    const score = insight?.ad_quality_score ?? veiculo.ad_quality_score ?? 0;
-                    const topSuggestion = insight?.suggestions?.[0];
+                  {operationalPanel.data.map((item) => {
                     return (
-                      <tr key={veiculo.id}>
+                      <tr key={item.id}>
                         <Td>
-                          <div>
-                            <p className="font-medium text-slate-950">{buildVehicleName(veiculo)}</p>
-                            <p className="text-xs text-slate-500">{veiculo.acquisition_source || "Origem nao informada"}</p>
+                          <div className="flex min-w-64 items-center gap-3">
+                            <div className="flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md bg-slate-100">
+                              {item.mainPhotoUrl ? (
+                                <img src={item.mainPhotoUrl} alt={itemTitle(item)} className="h-full w-full object-cover" />
+                              ) : (
+                                <Camera className="h-5 w-5 text-slate-400" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium text-slate-950">{itemTitle(item)}</p>
+                              <p className="text-xs text-slate-500">{item.licensePlate || "Placa nao informada"} · {item.imageCount} foto(s)</p>
+                            </div>
                           </div>
                         </Td>
-                        <Td>{veiculo.license_plate || "-"}<br /><span className="text-xs text-slate-500">{veiculo.mileage ? `${veiculo.mileage} km` : "KM nao informado"}</span></Td>
-                        <Td>{formatCurrency(veiculo.price)}</Td>
-                        <Td>{formatCurrency(getTotalCost(veiculo))}</Td>
-                        <Td><span className={margin >= 0 ? "text-emerald-700" : "text-red-700"}>{formatCurrency(margin)}</span></Td>
-                        <Td><Badge tone={scoreTone(score)}>{score}/100</Badge></Td>
-                        <Td>{veiculo.images?.length || 0}</Td>
                         <Td>
-                          <span className="line-clamp-2 text-xs text-slate-600">
-                            {topSuggestion?.action || "Sem alerta critico"}
-                          </span>
+                          <p className="font-medium text-slate-950">{formatCurrency(item.price)}</p>
+                          <p className="text-xs text-slate-500">FIPE {formatCurrency(item.fipeValue)}</p>
+                          <p className={item.fipeDeltaPercent && item.fipeDeltaPercent > 0 ? "text-xs text-amber-700" : "text-xs text-emerald-700"}>
+                            {item.fipeDeltaPercent == null ? "Sem comparativo" : `${formatCurrency(item.fipeDeltaAmount)} · ${formatPercent(item.fipeDeltaPercent)}`}
+                          </p>
                         </Td>
-                        <Td><Badge tone={statusTone(veiculo.status)}>{veiculo.status || "available"}</Badge></Td>
                         <Td>
-                          <PermissionGate permission="veiculos:update">
-                            <Button type="button" variant="secondary" size="sm" onClick={() => openEditModal(veiculo)}>
-                              <Pencil className="h-3.5 w-3.5" /> Editar
-                            </Button>
-                          </PermissionGate>
+                          <Badge tone={marginTone(item.expectedMarginPercent)}>
+                            {item.expectedMarginAmount == null ? "Nao calculada" : formatCurrency(item.expectedMarginAmount)}
+                          </Badge>
+                          <p className="mt-1 text-xs text-slate-500">{formatPercent(item.expectedMarginPercent)}</p>
+                          {activeView === "sold-month" ? <p className="text-xs text-slate-500">Realizada {formatCurrency(item.realizedMarginAmount)}</p> : null}
+                        </Td>
+                        <Td><Badge tone={scoreTone(item.adScore)}>{item.adScore}/100</Badge><p className="mt-1 text-xs text-slate-500">{operationalStatusLabel(item.adScoreGrade)}</p></Td>
+                        <Td>
+                          <div className="flex max-w-64 flex-wrap gap-1">
+                            {item.topPendingItems.length ? item.topPendingItems.slice(0, 3).map((pending) => (
+                              <Badge key={pending.key} tone={pending.severity === "blocking" || pending.severity === "critical" ? "red" : "amber"}>
+                                {pending.label}
+                              </Badge>
+                            )) : <span className="text-xs text-slate-500">Sem pendencias criticas</span>}
+                          </div>
+                        </Td>
+                        <Td>
+                          <Badge tone={recommendationTone(item.recommendation.type)}>{item.recommendation.title}</Badge>
+                          <p className="mt-1 max-w-64 text-xs text-slate-500">{item.recommendation.message}</p>
+                        </Td>
+                        <Td>
+                          <p className="font-medium text-slate-950">{item.daysInStock ?? "-"} dias</p>
+                          {item.soldAt ? <p className="text-xs text-slate-500">{new Date(item.soldAt).toLocaleDateString("pt-BR")}</p> : null}
+                          {item.soldBy ? <p className="text-xs text-slate-500">{item.soldBy}</p> : null}
+                        </Td>
+                        <Td>
+                          <div className="flex flex-col gap-1">
+                            <Badge tone={statusTone(item.status)}>{operationalStatusLabel(item.status)}</Badge>
+                            <Badge variant="neutral">{operationalStatusLabel(item.publicationStatus)}</Badge>
+                            <span className="text-xs text-slate-500">{operationalStatusLabel(item.preparationStatus)}</span>
+                          </div>
+                        </Td>
+                        <Td>
+                          <div className="flex flex-col gap-2">
+                            <PermissionGate permission="veiculos:update">
+                              <Button type="button" variant="secondary" size="sm" onClick={() => {
+                                const fullVehicle = veiculos.find((veiculo) => veiculo.id === item.id);
+                                if (fullVehicle) openEditModal(fullVehicle);
+                              }}>
+                                <Pencil className="h-3.5 w-3.5" /> Editar
+                              </Button>
+                            </PermissionGate>
+                            {item.actions.includes("publish") ? (
+                              <Button type="button" size="sm" disabled={!item.canPublish || preparationAction === `publish:${item.id}`} onClick={() => publishPanelVehicle(item.id)}>
+                                <Send className="h-3.5 w-3.5" />
+                                {preparationAction === `publish:${item.id}` ? "Publicando..." : "Publicar"}
+                              </Button>
+                            ) : null}
+                            {item.actions.includes("mark_sold") ? (
+                              <Button type="button" variant="ghost" size="sm" onClick={() => openSellModal(item)}>
+                                Marcar vendido
+                              </Button>
+                            ) : null}
+                          </div>
                         </Td>
                       </tr>
                     );
@@ -986,8 +1234,50 @@ export default function VeiculosPage() {
               </Table>
             </div>
           ) : null}
+          {operationalPanel?.pagination ? (
+            <p className="mt-4 text-xs text-slate-500">
+              Mostrando {operationalPanel.data.length} de {operationalPanel.pagination.total} veiculo(s) nesta visao.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
+
+      <Modal open={Boolean(sellTarget)} title="Marcar veiculo como vendido" onClose={closeSellModal}>
+        <form className="space-y-4" onSubmit={submitSellVehicle}>
+          <div>
+            <p className="text-sm font-semibold text-slate-950">{sellTarget ? itemTitle(sellTarget) : "Veiculo"}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Essa acao registra a venda, move o veiculo para vendidos do mes e pausa o anuncio publicado quando aplicavel.
+            </p>
+          </div>
+          <Input
+            label="Valor de venda"
+            value={sellForm.sold_price}
+            onChange={(event) => setSellForm((current) => ({ ...current, sold_price: event.target.value }))}
+            placeholder="Ex: 89900"
+          />
+          <Input
+            label="Data da venda"
+            type="date"
+            value={sellForm.sold_at}
+            onChange={(event) => setSellForm((current) => ({ ...current, sold_at: event.target.value }))}
+          />
+          <label className="block text-sm font-medium text-slate-700">
+            <span className="mb-2 block">Observacoes</span>
+            <textarea
+              className="min-h-24 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+              value={sellForm.notes}
+              onChange={(event) => setSellForm((current) => ({ ...current, notes: event.target.value }))}
+              placeholder="Forma de pagamento, observacoes comerciais ou detalhes da entrega."
+            />
+          </label>
+          {sellError ? <p className="text-sm text-red-600">{sellError}</p> : null}
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <Button type="button" variant="secondary" onClick={closeSellModal} disabled={isSelling}>Cancelar</Button>
+            <Button type="submit" disabled={isSelling}>{isSelling ? "Registrando..." : "Registrar venda"}</Button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal open={isModalOpen} title={editingVehicleId ? "Editar veiculo" : "Cadastrar veiculo"} onClose={closeModal}>
         <form className="space-y-6" onSubmit={onSubmitVehicle}>

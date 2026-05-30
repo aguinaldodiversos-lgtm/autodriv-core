@@ -246,11 +246,87 @@ async function remove(id, dealershipId) {
   return result.rows[0];
 }
 
+async function markAsSold({ id, dealershipId, soldPrice, soldAt, soldByUserId, notes }) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const currentResult = await client.query(
+      `SELECT *
+       FROM vehicles
+       WHERE id = $1
+         AND dealership_id = $2
+       FOR UPDATE`,
+      [id, dealershipId]
+    );
+    const current = currentResult.rows[0];
+    if (!current) {
+      const err = new Error("Veiculo nao encontrado");
+      err.statusCode = 404;
+      throw err;
+    }
+    if (current.status === "sold" || current.sold_at) {
+      const err = new Error("Veiculo ja esta marcado como vendido");
+      err.statusCode = 409;
+      err.payload = {
+        error: "VEHICLE_ALREADY_SOLD",
+        message: "Este veiculo ja esta marcado como vendido."
+      };
+      throw err;
+    }
+
+    const vehicleResult = await client.query(
+      `UPDATE vehicles
+       SET status = 'sold',
+           ad_status = CASE WHEN ad_status = 'published' THEN 'paused' ELSE ad_status END,
+           sold_at = COALESCE($1::timestamptz, NOW()),
+           sold_price = $2,
+           sold_by_user_id = $3,
+           sale_status = 'completed',
+           sale_notes = $4,
+           updated_at = NOW()
+       WHERE id = $5
+         AND dealership_id = $6
+       RETURNING *`,
+      [soldAt || null, soldPrice, soldByUserId || null, notes || null, id, dealershipId]
+    );
+
+    const saleResult = await client.query(
+      `INSERT INTO sales
+        (dealership_id, vehicle_id, user_id, price, payment_method, notes,
+         approval_status, approved_by, approved_at)
+       VALUES ($1,$2,$3,$4,$5,$6,'approved',$3,COALESCE($7::timestamptz, NOW()))
+       RETURNING *`,
+      [
+        dealershipId,
+        id,
+        soldByUserId || null,
+        soldPrice,
+        null,
+        notes || "Venda registrada pelo painel operacional",
+        soldAt || null
+      ]
+    );
+
+    await client.query("COMMIT");
+    return {
+      vehicle: vehicleResult.rows[0],
+      sale: saleResult.rows[0]
+    };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   create,
   findAll,
   findById,
   update,
   addImageUrls,
-  remove
+  remove,
+  markAsSold
 };

@@ -1,5 +1,6 @@
 const pool = require("../../config/db");
 const repo = require("./vehicles.repository");
+const operationalPanel = require("./vehicleOperationalPanel.service");
 const {
   buildVehicleSlug,
   buildSeoTitle,
@@ -20,6 +21,24 @@ function getDealershipId(user) {
   }
 
   return dealershipId;
+}
+
+function httpError(message, statusCode, payload) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  err.payload = payload;
+  return err;
+}
+
+function parseMoneyRequired(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw httpError("Valor de venda invalido", 400, {
+      error: "INVALID_SOLD_PRICE",
+      message: "Informe um valor de venda maior que zero."
+    });
+  }
+  return amount;
 }
 
 async function getDealership(dealershipId) {
@@ -117,6 +136,10 @@ async function listVehicles(user) {
   return repo.findAll(getDealershipId(user));
 }
 
+async function listOperationalVehicles(user, query) {
+  return operationalPanel.listVehiclesByOperationalView(user, query);
+}
+
 async function getVehicleById(id, user) {
   const vehicle = await repo.findById(id, getDealershipId(user));
 
@@ -162,10 +185,44 @@ async function deleteVehicle(id, user) {
   }
 }
 
+async function markVehicleAsSold(id, data = {}, user) {
+  const dealershipId = getDealershipId(user);
+  const existing = await repo.findById(id, dealershipId);
+  if (!existing) {
+    throw httpError("Veiculo nao encontrado", 404);
+  }
+  if (existing.status === "sold" || existing.sold_at) {
+    throw httpError("Veiculo ja esta marcado como vendido", 409, {
+      error: "VEHICLE_ALREADY_SOLD",
+      message: "Este veiculo ja esta marcado como vendido."
+    });
+  }
+
+  const soldPrice = parseMoneyRequired(data.sold_price ?? data.price);
+  const soldAt = data.sold_at ? new Date(data.sold_at) : null;
+  if (soldAt && Number.isNaN(soldAt.getTime())) {
+    throw httpError("Data de venda invalida", 400, {
+      error: "INVALID_SOLD_AT",
+      message: "Informe uma data de venda valida."
+    });
+  }
+
+  return repo.markAsSold({
+    id,
+    dealershipId,
+    soldPrice,
+    soldAt: soldAt ? soldAt.toISOString() : null,
+    soldByUserId: user.id || null,
+    notes: data.notes || null
+  });
+}
+
 module.exports = {
   createVehicle,
   listVehicles,
+  listOperationalVehicles,
   getVehicleById,
   updateVehicle,
-  deleteVehicle
+  deleteVehicle,
+  markVehicleAsSold
 };

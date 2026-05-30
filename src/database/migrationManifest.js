@@ -56,6 +56,7 @@ const migrations = [
   require("./migrations/049_ad_preparation_module"),
   require("./migrations/050_external_publication_channels"),
   require("./migrations/051_trade_appraisals"),
+  require("./migrations/052_vehicle_operational_panel"),
 ];
 
 const path = require("path");

@@ -103,3 +103,110 @@ export type CreateVeiculoPayload = {
   ad_status?: string;
   ad_quality_score?: number;
 };
+
+export type VehicleOperationalView = "stock" | "showroom" | "preparation" | "sold-month";
+
+export type VehicleOperationalPendingItem = {
+  key: string;
+  label: string;
+  severity: "info" | "warning" | "blocking" | "critical" | string;
+  category?: string | null;
+};
+
+export type VehicleOperationalRecommendation = {
+  type: string;
+  priority: "urgent" | "high" | "medium" | "low";
+  title: string;
+  message: string;
+  recommendedActions?: string[];
+};
+
+export type VehicleOperationalItem = {
+  id: number;
+  dealershipId: number;
+  brand?: string | null;
+  model?: string | null;
+  version?: string | null;
+  year?: number | null;
+  modelYear?: number | null;
+  licensePlate?: string | null;
+  mainPhotoUrl?: string | null;
+  imageCount: number;
+  status?: string | null;
+  publicationStatus?: string | null;
+  preparationStatus?: string | null;
+  price?: number | null;
+  fipeValue?: number | null;
+  fipeDeltaAmount?: number | null;
+  fipeDeltaPercent?: number | null;
+  acquisitionPrice?: number | null;
+  estimatedCosts?: number | null;
+  expectedMarginAmount?: number | null;
+  expectedMarginPercent?: number | null;
+  realizedMarginAmount?: number | null;
+  realizedMarginPercent?: number | null;
+  adScore: number;
+  adScoreGrade?: string | null;
+  canPublish: boolean;
+  daysInStock?: number | null;
+  soldAt?: string | null;
+  soldPrice?: number | null;
+  soldBy?: string | null;
+  saleStatus?: string | null;
+  topPendingItems: VehicleOperationalPendingItem[];
+  recommendation: VehicleOperationalRecommendation;
+  actions: string[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type VehicleOperationalSummary = {
+  view: VehicleOperationalView;
+  total: number;
+  stockCount: number;
+  showroomCount: number;
+  preparationCount: number;
+  soldMonthCount: number;
+  attentionCount: number;
+  blockedCount: number;
+  readyToPublishCount: number;
+  averageScore: number;
+  totalExpectedMargin: number;
+  totalRealizedMarginMonth: number;
+  totalSoldValueMonth?: number;
+  averageDaysInStockSoldMonth?: number;
+};
+
+export type VehicleOperationalResponse = {
+  data: VehicleOperationalItem[];
+  summary: VehicleOperationalSummary;
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type SellVehiclePayload = {
+  sold_price: number;
+  sold_at?: string | null;
+  notes?: string | null;
+};
+
+export type SellVehicleResult = {
+  vehicle: Veiculo & {
+    sold_at?: string | null;
+    sold_price?: number | string | null;
+    sold_by_user_id?: number | null;
+    sale_status?: string | null;
+    sale_notes?: string | null;
+  };
+  sale: {
+    id: number;
+    vehicle_id?: number | null;
+    price: number | string;
+    approval_status?: string | null;
+    approved_at?: string | null;
+  };
+};

@@ -19,6 +19,8 @@ router.post("/", requireAuth, requireBillingEntitlement("vehicles:create"), cont
 
 router.put("/:id", requireAuth, requireBillingEntitlement("vehicles:update"), controller.updateVehicle);
 
+router.post("/:id/sell", requireAuth, requireBillingEntitlement("vehicles:update"), controller.sellVehicle);
+
 router.delete("/:id", requireAuth, requireBillingEntitlement("vehicles:update"), controller.deleteVehicle);
 
 router.post(

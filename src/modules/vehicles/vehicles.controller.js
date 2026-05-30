@@ -9,11 +9,18 @@ function errorStatus(err) {
 
 async function getVehicles(req, res) {
   try {
+    if (req.query.view) {
+      const panel = await service.listOperationalVehicles(req.user, req.query);
+      return res.json(panel);
+    }
     const vehicles = await service.listVehicles(req.user);
-    res.json(vehicles);
+    return res.json(vehicles);
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json(err.payload || { error: err.message });
+    }
     console.error("Erro ao listar veiculos:", err);
-    res.status(500).json({ error: "Erro ao listar veiculos" });
+    return res.status(500).json({ error: "Erro ao listar veiculos" });
   }
 }
 
@@ -57,6 +64,18 @@ async function deleteVehicle(req, res) {
   }
 }
 
+async function sellVehicle(req, res) {
+  try {
+    const result = await service.markVehicleAsSold(req.params.id, req.body, req.user);
+    return res.json(result);
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json(err.payload || { error: err.message });
+    }
+    return res.status(errorStatus(err)).json({ error: err.message });
+  }
+}
+
 async function applyVehicleSuggestion(req, res) {
   try {
     const dealershipId = req.user.dealership_id;
@@ -79,5 +98,6 @@ module.exports = {
   createVehicle,
   updateVehicle,
   deleteVehicle,
+  sellVehicle,
   applyVehicleSuggestion
 };

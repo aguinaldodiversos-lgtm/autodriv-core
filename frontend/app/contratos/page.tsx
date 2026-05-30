@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { FileText, Plus } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Table } from "@/components/ui/Table";
 import { PermissionGate } from "@/components/auth/PermissionGate";
@@ -47,10 +47,13 @@ export default function ContratosPage() {
           </div>
 
           <PermissionGate permission="contratos:create">
-            <Button type="button" disabled>
+            <Link
+              href="/propostas"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+            >
               <Plus className="h-4 w-4" />
-              Novo contrato
-            </Button>
+              Nova proposta
+            </Link>
           </PermissionGate>
         </div>
 

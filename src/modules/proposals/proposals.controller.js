@@ -40,9 +40,23 @@ async function remove(req, res) {
   }
 }
 
+async function accept(req, res) {
+  try {
+    const result = await service.acceptProposal(req.params.id, req.body, req.user);
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(err.statusCode || 400).json(
+      err.payload || {
+        error: err.message
+      }
+    );
+  }
+}
+
 module.exports = {
   create,
   list,
   update,
-  remove
+  remove,
+  accept
 };

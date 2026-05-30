@@ -57,6 +57,7 @@ const migrations = [
   require("./migrations/050_external_publication_channels"),
   require("./migrations/051_trade_appraisals"),
   require("./migrations/052_vehicle_operational_panel"),
+  require("./migrations/053_proposal_contract_flow"),
 ];
 
 const path = require("path");
